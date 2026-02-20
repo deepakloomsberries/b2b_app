@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block body_class %}mobile-ui{% endblock %}
+
+{% block content %}
+<header class="app-header with-back">
+    <span class="back-button header-spacer" aria-hidden="true"></span>
+    <h1>Dashboard</h1>
+    <div class="header-actions">
+        <a class="icon-button" href="{{ url_for('logout') }}" aria-label="Log out">
+            ⎋
+        </a>
+    </div>
+</header>
+
+<p class="app-greeting">Hello {{ session.get('user').get('name') }}!</p>
+
+<section class="dashboard-grid">
+    <a class="dashboard-tile tile-buyers" href="{{ url_for('customers_list') }}">
+        <span class="tile-icon">👥</span>
+        <span class="tile-label">Buyers</span>
+    </a>
+    <a class="dashboard-tile tile-catalogue" href="{{ url_for('customers_list') }}">
+        <span class="tile-icon">🛍️</span>
+        <span class="tile-label">Catalogue</span>
+    </a>
+    <a class="dashboard-tile tile-add" href="{{ url_for('customer_new') }}">
+        <span class="tile-icon">＋</span>
+        <span class="tile-label">Add Buyer</span>
+    </a>
+    <a class="dashboard-tile tile-notify" href="{{ url_for('drafts_list') }}">
+        <span class="tile-icon">🔔</span>
+        <span class="tile-label">Drafts</span>
+    </a>
+    <a class="dashboard-tile tile-orders" href="{{ url_for('orders_list') }}">
+        <span class="tile-icon">🧾</span>
+        <span class="tile-label">Order History</span>
+    </a>
+    <a class="dashboard-tile tile-orders" href="{{ url_for('dashboard_mobile') }}">
+        <span class="tile-icon">📊</span>
+        <span class="tile-label">Order Status</span>
+    </a>
+    <a class="dashboard-tile tile-admin" href="{{ url_for('admin') }}">
+        <span class="tile-icon">⚙️</span>
+        <span class="tile-label">Settings</span>
+    </a>
+</section>
+
+<section class="dashboard-card">
+    <div class="dashboard-stats">
+        <div>
+            <strong>{{ total_buyers }}</strong>
+            <span>Total Buyers</span>
+        </div>
+        <div>
+            <strong>{{ orders_this_month }}</strong>
+            <span>Orders This Month</span>
+        </div>
+        <div>
+            <strong>SAR {{ '%.2f'|format(revenue_this_month) }}</strong>
+            <span>Revenue</span>
+        </div>
+    </div>
+</section>
+
+<section class="dashboard-card beat-plan">
+    <div class="card-header">
+        <div>
+            <h2>Daily Beat Plan</h2>
+            <p class="muted">Auto-prioritized route for nearby and high-priority shops.</p>
+        </div>
+        <button type="button" class="button secondary small">🧭 Optimize Route</button>
+    </div>
+    <div class="beat-list">
+        {% for customer in beat_plan %}
+            <a class="beat-item" href="{{ url_for('catalog', customer_id=customer.id) }}">
+                <div>
+                    <div class="beat-title">{{ customer.name }}</div>
+                    <div class="beat-meta">
+                        <span>{{ customer.city or "Location not set" }}</span>
+                        <span>Last visit: {{ customer.last_visited_at|format_dt or "Not visited" }}</span>
+                    </div>
+                </div>
+                {% if customer.priority_flag %}
+                    <span class="priority-badge {{ customer.priority_flag }}">★ {{ customer.priority_flag.replace('_', ' ') }}</span>
+                {% endif %}
+            </a>
+        {% else %}
+            <div class="empty-state">Add buyers with locations to see your beat plan.</div>
+        {% endfor %}
+    </div>
+</section>
+
+<a class="fab" href="{{ url_for('customers_list') }}" aria-label="New order">🧾</a>
+{% endblock %}

@@ -1,0 +1,5 @@
+sku,title,price,cash_price,credit_price,category,subcategory,image_url,image_url_1,image_url_2,image_url_3,image_url_4,category_image_url,subcategory_image_url
+SKU-1001,Premium Coffee Beans,12.50,11.90,12.50,Beverages,Coffee,,https://via.placeholder.com/200?text=Coffee1,https://via.placeholder.com/200?text=Coffee2,https://via.placeholder.com/200?text=Coffee3,https://via.placeholder.com/200?text=Coffee4,,
+SKU-1002,Espresso Capsules,9.99,9.25,9.99,Beverages,Coffee,,https://via.placeholder.com/200?text=Capsule1,https://via.placeholder.com/200?text=Capsule2,https://via.placeholder.com/200?text=Capsule3,https://via.placeholder.com/200?text=Capsule4,,
+SKU-2001,Organic Green Tea,8.25,7.80,8.25,Beverages,Tea,,https://via.placeholder.com/200?text=Tea1,https://via.placeholder.com/200?text=Tea2,,,,,
+SKU-3001,Reusable Cup,6.00,5.50,6.00,Accessories,Cups,,https://via.placeholder.com/200?text=Cup1,https://via.placeholder.com/200?text=Cup2,https://via.placeholder.com/200?text=Cup3,https://via.placeholder.com/200?text=Cup4,,

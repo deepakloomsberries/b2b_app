@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+
+{% block body_class %}mobile-ui{% endblock %}
+
+{% block content %}
+<header class="app-header with-back">
+    <a class="back-button" href="{{ url_for('home') }}" aria-label="Back">←</a>
+    <h1>Buyers</h1>
+    <a class="icon-button" href="{{ url_for('customer_new') }}" aria-label="Add buyer">＋</a>
+</header>
+
+<form method="get" class="app-search">
+    <input type="text" name="q" placeholder="Search for Buyer" value="{{ query }}">
+    <button type="submit" class="icon-button" aria-label="Search">🔍</button>
+</form>
+
+<section class="buyer-list">
+    {% for customer in customers %}
+        <article class="buyer-card">
+            <div class="buyer-avatar">{{ customer.name[:1] }}</div>
+            <div class="buyer-content">
+                <div class="buyer-name">
+                    {{ customer.name }}
+                    {% if customer.priority_flag %}
+                        <span class="priority-badge {{ customer.priority_flag }}">★ {{ customer.priority_flag.replace('_', ' ') }}</span>
+                    {% endif %}
+                </div>
+                <div class="buyer-summary">
+                    <span>Last order: {{ customer.last_order_date|format_dt or "No orders yet" }}</span>
+                    <span>Outstanding: SAR {{ '%.2f'|format(customer.outstanding_balance or 0) }}</span>
+                </div>
+                <div class="buyer-actions">
+                    <details class="buyer-details">
+                        <summary class="outline-button">Details</summary>
+                        <div class="buyer-meta">
+                            <span>{{ customer.phone or "Phone not set" }}</span>
+                            <span>{{ customer.address or "Address not set" }}</span>
+                            <span>Last visit: {{ customer.last_visited_at|format_dt or "Not visited" }}</span>
+                            <span>Last order value: SAR {{ '%.2f'|format(customer.last_order_total or 0) }}</span>
+                        </div>
+                        <form method="post" action="{{ url_for('update_customer_priority', customer_id=customer.id) }}" class="buyer-priority-form">
+                            <label>
+                                Priority
+                                <select name="priority_flag">
+                                    <option value="" {% if not customer.priority_flag %}selected{% endif %}>No priority</option>
+                                    <option value="needs_visit" {% if customer.priority_flag == "needs_visit" %}selected{% endif %}>Needs visit today</option>
+                                    <option value="high_potential" {% if customer.priority_flag == "high_potential" %}selected{% endif %}>High potential</option>
+                                    <option value="on_hold" {% if customer.priority_flag == "on_hold" %}selected{% endif %}>On hold</option>
+                                </select>
+                            </label>
+                            <label>
+                                Outstanding balance
+                                <input type="number" step="0.01" name="outstanding_balance" value="{{ customer.outstanding_balance or 0 }}">
+                            </label>
+                            <button type="submit" class="outline-button">Update Summary</button>
+                        </form>
+                        <form method="post" action="{{ url_for('customer_visit', customer_id=customer.id) }}">
+                            <button type="submit" class="outline-button">Mark Visited</button>
+                        </form>
+                    </details>
+                    <a class="outline-button" href="{{ url_for('catalog', customer_id=customer.id) }}">Shop</a>
+                </div>
+            </div>
+        </article>
+    {% else %}
+        <div class="empty-state">No buyers found.</div>
+    {% endfor %}
+</section>
+
+{% endblock %}

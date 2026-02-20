@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block body_class %}mobile-ui{% endblock %}
+
+{% block content %}
+<header class="app-header with-back">
+    <a class="back-button" href="{{ url_for('customers_list') }}" aria-label="Back">←</a>
+    <h1>Add Buyer</h1>
+</header>
+
+<form method="post" class="app-form">
+    <label class="form-field">
+        <span>Business Name *</span>
+        <input type="text" name="name" required>
+    </label>
+    <div class="form-row">
+        <label class="form-field">
+            <span>Phone Code *</span>
+            <input type="text" name="phone_code" value="+91">
+        </label>
+        <label class="form-field">
+            <span>Phone Number *</span>
+            <input type="text" name="phone">
+        </label>
+    </div>
+    <label class="form-field">
+        <span>Email Address</span>
+        <input type="email" name="email">
+    </label>
+    <label class="form-field">
+        <span>Address *</span>
+        <input type="text" name="address">
+    </label>
+    <div class="form-row">
+        <label class="form-field">
+            <span>Longitude</span>
+            <input type="text" name="longitude">
+        </label>
+        <label class="form-field">
+            <span>Latitude</span>
+            <input type="text" name="latitude">
+        </label>
+    </div>
+    <div class="form-row">
+        <label class="form-field">
+            <span>City *</span>
+            <input type="text" name="city">
+        </label>
+        <label class="form-field">
+            <span>State/Province</span>
+            <input type="text" name="state">
+        </label>
+    </div>
+    <label class="form-field">
+        <span>Country *</span>
+        <input type="text" name="country">
+    </label>
+    <label class="form-field">
+        <span>Zip Code</span>
+        <input type="text" name="zip_code">
+    </label>
+    <label class="form-field">
+        <span>Select Buyer Group</span>
+        <select name="buyer_group">
+            <option value="">Select Buyer Group</option>
+            <option value="default">Default</option>
+            <option value="premium">Premium</option>
+        </select>
+    </label>
+    <div class="form-row">
+        <label class="form-field">
+            <span>Priority Flag</span>
+            <select name="priority_flag">
+                <option value="">No priority</option>
+                <option value="needs_visit">Needs visit today</option>
+                <option value="high_potential">High potential</option>
+                <option value="on_hold">On hold</option>
+            </select>
+        </label>
+        <label class="form-field">
+            <span>Outstanding Balance (SAR)</span>
+            <input type="number" step="0.01" name="outstanding_balance" value="0">
+        </label>
+    </div>
+    <label class="checkbox-field">
+        <input type="checkbox" name="app_user">
+        <span>APP USER (Tick here if buyer is the app user)</span>
+    </label>
+    <p class="muted">Note: * marked fields are mandatory.</p>
+    <button type="submit" class="button primary wide">Add</button>
+</form>
+{% endblock %}

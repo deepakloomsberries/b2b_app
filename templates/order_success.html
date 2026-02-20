@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="success-card">
+    <div class="success-icon">✓</div>
+    <h1>Order Placed!</h1>
+    <p>Your order number is <strong>{{ order_number }}</strong>.</p>
+    {% if export_warning %}
+        <div class="warning-banner">Warning: {{ export_warning }} The order was saved locally.</div>
+    {% endif %}
+    <div class="share-actions">
+        <a class="button" href="{{ url_for('home') }}">New Order</a>
+        <a class="button secondary" target="_blank" rel="noopener" href="https://wa.me/?text=Order%20{{ order_number }}%20confirmed%20from%20B2B%20Order%20App">WhatsApp</a>
+        <a class="button secondary" href="mailto:?subject=Order%20{{ order_number }}%20Confirmation&body=Your%20order%20{{ order_number }}%20has%20been%20confirmed.">Email</a>
+    </div>
+</div>
+{% endblock %}

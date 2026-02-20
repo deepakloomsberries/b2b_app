@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <h1>Draft Orders</h1>
+        <p>Resume or clear saved drafts.</p>
+    </div>
+</section>
+
+<table class="table">
+    <thead>
+        <tr>
+            <th>Buyer</th>
+            <th>Last Updated</th>
+            <th>Total Qty</th>
+            <th>Total Amount</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for draft in drafts %}
+            <tr>
+                <td>{{ draft.customer_name }}</td>
+                <td>{{ draft.updated_at }}</td>
+                <td>{{ draft.total_qty }}</td>
+                <td>SAR {{ '%.2f'|format(draft.total_amount) }}</td>
+                <td>
+                    <div class="action-row">
+                        <a class="button small" href="{{ url_for('catalog', customer_id=draft.customer_id, draft_id=draft.id) }}">Resume</a>
+                        <form method="post" action="{{ url_for('delete_draft', draft_id=draft.id) }}">
+                            <button type="submit" class="button small danger">Clear</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+        {% else %}
+            <tr>
+                <td colspan="5">No drafts saved.</td>
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

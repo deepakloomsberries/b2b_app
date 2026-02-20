@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="B2B Order App icon">
+  <rect width="512" height="512" rx="108" fill="#1f6feb"/>
+  <rect x="96" y="96" width="320" height="320" rx="64" fill="#ffffff"/>
+  <path d="M160 208h192v32H160v-32zm0 80h192v32H160v-32zm0 80h128v32H160v-32z" fill="#1f6feb"/>
+</svg>

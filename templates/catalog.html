@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+
+{% block body_class %}mobile-ui catalog-page force-mobile{% endblock %}
+
+{% block content %}
+<header class="app-header with-back">
+    <a class="back-button" href="{{ url_for('customers_list') }}" aria-label="Back">←</a>
+    <h1>{{ customer.name }}</h1>
+    <div class="header-actions">
+        <button type="button" class="icon-button focus-button" id="toggle-focus" aria-label="Toggle focus mode">🎯</button>
+        <button type="button" class="icon-button" id="open-search" aria-label="Search">🔍</button>
+        <button type="button" class="icon-button cart-button" aria-label="Cart">
+            🛒
+            <span class="cart-count" id="cart-count">0</span>
+        </button>
+    </div>
+</header>
+
+<div class="filters">
+    <div class="section-title section-title-row">
+        <span>Categories</span>
+        <button type="button" class="button secondary compact" id="open-category-hierarchy">
+            Browse
+        </button>
+    </div>
+    <div class="category-scroll">
+        {% for category in categories %}
+            <button class="chip category-chip" data-category="{{ category }}">
+                {% if category_images.get(category) %}
+                    <img src="{{ category_images.get(category) }}" alt="{{ category }}" loading="lazy" decoding="async" width="72" height="72">
+                {% endif %}
+                <span>{{ category }}</span>
+            </button>
+        {% endfor %}
+    </div>
+    <div class="filter-row">
+        <div class="section-title section-title-row">
+            <span>Sub Categories</span>
+            <button type="button" class="icon-button toggle-button" id="toggle-subcategories" aria-expanded="true">▾</button>
+        </div>
+        <div class="subcategory-scroll" id="subcategory-scroll">
+            {% for category, subs in subcategory_map|dictsort %}
+                {% for subcategory in subs|sort %}
+                    <button class="chip subcategory-chip" data-subcategory="{{ subcategory }}" data-category="{{ category }}">
+                        {% if subcategory_images.get(subcategory) %}
+                            <img src="{{ subcategory_images.get(subcategory) }}" alt="{{ subcategory }}" loading="lazy" decoding="async" width="72" height="72">
+                        {% endif %}
+                        <span>{{ subcategory }}</span>
+                    </button>
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+    <div class="filter-row">
+        <div class="section-title section-title-row">
+            <span>Sub Sub Categories</span>
+            <button type="button" class="icon-button toggle-button" id="toggle-subsubcategories" aria-expanded="true">▾</button>
+        </div>
+        <div class="subsubcategory-scroll" id="subsubcategory-scroll">
+            {% for subcategory, subsubs in sub_subcategory_map|dictsort %}
+                {% for sub_subcategory in subsubs|sort %}
+                    <button class="chip subsubcategory-chip" data-subsubcategory="{{ sub_subcategory }}" data-subcategory="{{ subcategory }}">
+                        {% if sub_subcategory_images.get(sub_subcategory) %}
+                            <img src="{{ sub_subcategory_images.get(sub_subcategory) }}" alt="{{ sub_subcategory }}" loading="lazy" decoding="async" width="72" height="72">
+                        {% endif %}
+                        <span>{{ sub_subcategory }}</span>
+                    </button>
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+    <div class="filter-controls">
+        <label class="toggle">
+            <input type="checkbox" id="in-stock-toggle" checked>
+            <span>In-stock only</span>
+        </label>
+        <label class="sort-control">
+            <span class="sort-label">Sort by</span>
+            <select id="sort-select">
+                <option value="sequence">Sequence</option>
+                <option value="name">Name (A-Z)</option>
+                <option value="sku">SKU</option>
+                <option value="price">Price (low-high)</option>
+                <option value="stock">Stock (high-low)</option>
+            </select>
+        </label>
+    </div>
+</div>
+
+<dialog id="category-hierarchy-dialog" class="modal modal-sheet">
+    <div class="modal-surface">
+        <div class="modal-header">
+            <h3 id="category-hierarchy-title">Categories</h3>
+            <button type="button" class="icon-button" id="close-category-hierarchy" aria-label="Close categories">×</button>
+        </div>
+        <div class="category-hierarchy-body" id="category-hierarchy-body"></div>
+    </div>
+</dialog>
+
+<form id="order-form" method="post" action="{{ url_for('review_order') }}">
+    <input type="hidden" name="customer_id" value="{{ customer.id }}">
+    <input type="hidden" name="items_json" id="items-json" value="[]">
+
+    <div id="product-list" class="product-list {{ 'list-view' if view_setting == 'list' else 'grid-view' }}"></div>
+
+    <div class="sticky-footer" id="cart-footer">
+        <div class="totals">
+            <div><span id="total-skus">0</span> SKUs | <span id="total-qty">0</span> items</div>
+            <strong>Total: SAR <span id="total-amount">0.00</span></strong>
+        </div>
+        <div class="footer-actions">
+            <button type="submit" id="place-order-btn" class="button" disabled>Place Order</button>
+            <button type="button" id="save-draft-btn" class="button secondary">Save Draft</button>
+            <button type="button" id="clear-draft-btn" class="button danger">Clear Draft</button>
+        </div>
+    </div>
+</form>
+
+<dialog id="clear-draft-modal" class="modal">
+    <div class="modal-surface">
+        <form method="dialog" class="form-card">
+            <h3>Clear Draft?</h3>
+            <p class="muted">This removes all quantities from the current draft.</p>
+            <div class="action-row">
+                <button type="button" class="button danger" id="confirm-clear-draft">Clear Draft</button>
+                <button type="button" class="button secondary" id="cancel-clear-draft">Cancel</button>
+            </div>
+        </form>
+    </div>
+</dialog>
+
+<dialog id="search-dialog" class="modal modal-sheet">
+    <div class="modal-surface">
+        <div class="modal-header">
+            <h3>Search</h3>
+            <button type="button" class="icon-button" id="close-search" aria-label="Close search">×</button>
+        </div>
+        <div class="search-modal-input">
+            <select id="search-type">
+                <option value="products">Products</option>
+            </select>
+            <input type="text" id="search-modal-input" placeholder="Search products">
+            <button type="button" class="icon-button" id="clear-search-modal" aria-label="Clear search">×</button>
+        </div>
+        <div id="search-results" class="search-results"></div>
+    </div>
+</dialog>
+
+<dialog id="pdp-dialog" class="modal modal-sheet">
+    <div class="modal-surface">
+        <div class="modal-header">
+            <button type="button" class="back-button" id="close-pdp" aria-label="Back">←</button>
+            <h3>Details</h3>
+            <button type="button" class="icon-button cart-button" id="pdp-cart" aria-label="Cart">
+                🛒
+                <span class="cart-count" id="pdp-cart-count">0</span>
+            </button>
+        </div>
+        <div class="pdp-images" id="pdp-images"></div>
+        <div class="pdp-card">
+            <h4 id="pdp-title"></h4>
+            <div class="pdp-meta">
+                <span id="pdp-unit">Unit: item</span>
+                <span id="pdp-moq">Min Qty: 1</span>
+            </div>
+            <div class="pdp-price">
+                <span id="pdp-price"></span>
+                <span class="muted">(Excl. of taxes)</span>
+            </div>
+            <div class="pdp-meta">
+                <span id="pdp-sku"></span>
+            </div>
+            <div class="pdp-meta">
+                <span id="pdp-stock"></span>
+            </div>
+            <div class="pdp-stock-status" id="pdp-stock-status"></div>
+        </div>
+        <button type="button" class="button primary wide pdp-add" id="pdp-add">Add to Cart</button>
+    </div>
+</dialog>
+
+{% if draft %}
+<script>
+    window.catalogDraft = {{ draft.items_json | safe }};
+</script>
+{% else %}
+<script>
+    window.catalogDraft = null;
+</script>
+{% endif %}
+
+<script>
+    window.catalogProducts = {{ products_json | tojson }};
+    window.appSettings = {{ catalog_settings | tojson }};
+</script>
+
+<script src="{{ url_for('static', filename='js/catalog.js') }}"></script>
+<script>
+    const focusToggle = document.getElementById('toggle-focus');
+    const focusKey = 'catalogFocusMode';
+
+    const applyFocusMode = (enabled) => {
+        document.body.classList.toggle('focus-mode', enabled);
+        if (focusToggle) {
+            focusToggle.classList.toggle('active', enabled);
+        }
+    };
+
+    const storedFocus = localStorage.getItem(focusKey) === 'true';
+    applyFocusMode(storedFocus);
+
+    focusToggle?.addEventListener('click', () => {
+        const nextState = !document.body.classList.contains('focus-mode');
+        localStorage.setItem(focusKey, nextState);
+        applyFocusMode(nextState);
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,30 @@
+# Environment & secrets
+.env
+*.json
+!sample_data/*.json
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads / generated files
+static/uploads/
+
+# Logs
+*.log

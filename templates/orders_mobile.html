@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block body_class %}mobile-orders-page mobile-ui{% endblock %}
+
+{% block content %}
+<header class="mobile-page-header">
+    <a class="back-button" href="{{ url_for('dashboard_mobile') }}" aria-label="Back">←</a>
+    <h1>Order List</h1>
+    <button class="icon-button" type="button" aria-label="Filter">☰</button>
+</header>
+
+<div class="mobile-toolbar">
+    <span class="toolbar-label">Sort by Order Date</span>
+    <button class="icon-button" type="button" aria-label="Sort">⇅</button>
+</div>
+
+<section class="order-cards">
+    {% if orders %}
+        {% for order in orders %}
+            <article class="order-card">
+                <div class="order-date">
+                    <span class="order-year">{{ order.year }}</span>
+                    <span class="order-day">{{ order.day }}</span>
+                    <span class="order-month">{{ order.month }}</span>
+                </div>
+                <div class="order-info">
+                    <div class="order-row">
+                        <div>
+                            <div class="order-number">ORDER # {{ order.order_number }}</div>
+                            <div class="order-buyer">🏪 {{ order.customer_name }}</div>
+                        </div>
+                        <div class="order-meta">
+                            <span class="order-status {{ order.order_status }}">{{ order.order_status|capitalize }}</span>
+                            <span class="order-amount">SAR {{ '%.2f'|format(order.total_amount) }}</span>
+                        </div>
+                    </div>
+                    <div class="order-actions">
+                        {% if order.customer_phone %}
+                            <a href="tel:{{ order.customer_phone }}" aria-label="Call">📞</a>
+                        {% endif %}
+                        {% if order.customer_email %}
+                            <a href="mailto:{{ order.customer_email }}" aria-label="Email">✉️</a>
+                        {% endif %}
+                        <button type="button" class="view-order" data-order-number="{{ order.order_number }}" aria-label="View order">📄</button>
+                        <button type="button" aria-label="Share">↗</button>
+                    </div>
+                </div>
+            </article>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">No orders found.</div>
+    {% endif %}
+</section>
+
+<dialog id="order-detail-modal" class="modal">
+    <div class="modal-surface">
+        <div class="modal-header">
+            <h3 id="order-detail-title">Order Details</h3>
+            <button type="button" class="icon-button" id="close-order-detail" aria-label="Close">×</button>
+        </div>
+        <div id="order-detail-content" class="order-detail-content"></div>
+    </div>
+</dialog>
+
+<nav class="mobile-bottom-nav">
+    <a href="{{ url_for('dashboard_mobile') }}">Dashboard</a>
+    <a class="active" href="{{ url_for('orders_mobile') }}">Orders</a>
+    <span>Profile</span>
+    <span>Payments</span>
+    <span>Search</span>
+</nav>
+
+<script src="{{ url_for('static', filename='js/orders_mobile.js') }}"></script>
+{% endblock %}

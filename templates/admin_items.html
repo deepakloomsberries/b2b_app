@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block body_class %}admin-page{% endblock %}
+
+{% block content %}
+<section class="page-header">
+    <div>
+        <h1>Item Management</h1>
+        <p>Manage catalogue items, pricing, and images.</p>
+    </div>
+    <a class="button secondary small" href="{{ url_for('admin') }}">Back to Admin</a>
+</section>
+
+{% if message %}
+    <div class="flash success">{{ message }}</div>
+{% endif %}
+{% if warning %}
+    <div class="flash error">{{ warning }}</div>
+{% endif %}
+
+<div class="admin-grid admin-items-grid">
+    <div class="card admin-section">
+        <h2>Items</h2>
+        <form method="get" class="admin-search">
+            <input type="text" name="q" placeholder="Search by SKU or title" value="{{ product_query }}">
+            <input type="hidden" name="page" value="1">
+            <select name="limit">
+                {% for option in [25, 50, 100] %}
+                    <option value="{{ option }}" {% if option == product_limit %}selected{% endif %}>Show {{ option }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="button secondary small">Search</button>
+        </form>
+        <div class="admin-meta">
+            Showing {{ products|length }} of {{ product_total }} items (page {{ product_page }})
+            {% if product_has_more %}
+                — refine search or increase the limit to load more.
+            {% endif %}
+        </div>
+        <div class="admin-pagination">
+            {% if product_page > 1 %}
+                <a class="button small secondary" href="{{ url_for('admin_items', q=product_query, limit=product_limit, page=product_page-1) }}">Previous</a>
+            {% endif %}
+            {% if product_has_more %}
+                <a class="button small secondary" href="{{ url_for('admin_items', q=product_query, limit=product_limit, page=product_page+1) }}">Next</a>
+            {% endif %}
+        </div>
+        <ul class="admin-list">
+            {% for product in products %}
+                <li class="admin-list-item">
+                    {% if product.image_url %}
+                        <img src="{{ product.image_url }}" alt="{{ product.title }}" loading="lazy" decoding="async">
+                    {% endif %}
+                    <div>
+                        <div class="title">{{ product.title }}</div>
+                        <div class="meta">SKU: {{ product.sku }}</div>
+                        <div class="meta">SAR {{ '%.2f'|format(product.price or 0) }}</div>
+                    </div>
+                    <div class="admin-item-actions">
+                        {% if product.is_active %}
+                            <span class="pill success">Active</span>
+                        {% else %}
+                            <span class="pill muted">Hidden</span>
+                        {% endif %}
+                        <a class="button small secondary" href="{{ url_for('admin_items', q=product_query, limit=product_limit, page=product_page, sku=product.sku) }}">Edit</a>
+                    </div>
+                </li>
+            {% else %}
+                <li class="admin-list-item">No products available.</li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="card admin-section">
+        <h2>{{ "Edit Item" if edit_product else "Add Item" }}</h2>
+        <form method="post" class="form-card compact admin-form-grid">
+            <input type="hidden" name="action" value="save_item">
+            <label>
+                SKU
+                <input type="text" name="sku" value="{{ edit_product.sku if edit_product else '' }}" required>
+            </label>
+            <label>
+                Title
+                <input type="text" name="title" value="{{ edit_product.title if edit_product else '' }}" required>
+            </label>
+            <label>
+                Price
+                <input type="number" step="0.01" name="price" value="{{ edit_product.price if edit_product else '' }}">
+            </label>
+            <label>
+                Cash Price
+                <input type="number" step="0.01" name="price_cash" value="{{ edit_product.price_cash if edit_product else '' }}">
+            </label>
+            <label>
+                Credit Price
+                <input type="number" step="0.01" name="price_credit" value="{{ edit_product.price_credit if edit_product else '' }}">
+            </label>
+            <label>
+                Category
+                <input type="text" name="category" list="category-list" value="{{ edit_product.category if edit_product else '' }}">
+            </label>
+            <label>
+                Subcategory
+                <input type="text" name="subcategory" list="subcategory-list" value="{{ edit_product.subcategory if edit_product else '' }}">
+            </label>
+            <label>
+                Sub-subcategory
+                <input type="text" name="sub_subcategory" list="sub-subcategory-list" value="{{ edit_product.sub_subcategory if edit_product else '' }}">
+            </label>
+            <label>
+                MFR No.
+                <input type="text" name="mfr_no" value="{{ edit_product.mfr_no if edit_product else '' }}">
+            </label>
+            <label>
+                Sort Order
+                <input type="number" name="sort_order" value="{{ edit_product.sort_order if edit_product else '' }}">
+            </label>
+            <label>
+                Image URL (primary)
+                <input type="text" name="image_url" value="{{ edit_product.image_url if edit_product else '' }}">
+            </label>
+            <label>
+                Image URL 1
+                <input type="text" name="image_url_1" value="{{ edit_product.image_url_1 if edit_product else '' }}">
+            </label>
+            <label>
+                Image URL 2
+                <input type="text" name="image_url_2" value="{{ edit_product.image_url_2 if edit_product else '' }}">
+            </label>
+            <label>
+                Image URL 3
+                <input type="text" name="image_url_3" value="{{ edit_product.image_url_3 if edit_product else '' }}">
+            </label>
+            <label>
+                Image URL 4
+                <input type="text" name="image_url_4" value="{{ edit_product.image_url_4 if edit_product else '' }}">
+            </label>
+            <label class="checkbox-row">
+                <input type="checkbox" name="is_active" value="1" {% if edit_product and edit_product.is_active %}checked{% endif %}>
+                Active in catalogue
+            </label>
+            <div class="action-row">
+                <button type="submit" class="button">Save Item</button>
+                {% if edit_product %}
+                    <a class="button secondary" href="{{ url_for('admin_items') }}">Clear</a>
+                {% endif %}
+            </div>
+        </form>
+        {% if edit_product %}
+            <form method="post" class="inline-form danger-zone">
+                <input type="hidden" name="action" value="delete_item">
+                <input type="hidden" name="sku" value="{{ edit_product.sku }}">
+                <button type="submit" class="button danger small">Hide Item</button>
+            </form>
+        {% endif %}
+        <datalist id="category-list">
+            {% for category in categories %}
+                <option value="{{ category.name }}"></option>
+            {% endfor %}
+        </datalist>
+        <datalist id="subcategory-list">
+            {% for subcategory in subcategories %}
+                <option value="{{ subcategory.name }}"></option>
+            {% endfor %}
+        </datalist>
+        <datalist id="sub-subcategory-list">
+            {% for sub_subcategory in sub_subcategories %}
+                <option value="{{ sub_subcategory.name }}"></option>
+            {% endfor %}
+        </datalist>
+    </div>
+</div>
+
+<div class="admin-grid">
+    <div class="card admin-section">
+        <h2>Category Icons</h2>
+        <p>Recommended size: 200x200 px.</p>
+        <form method="post">
+            <input type="hidden" name="action" value="add_category_image">
+            <label>
+                Category
+                <select name="category_name" required>
+                    <option value="">Select category</option>
+                    {% for category in categories %}
+                        <option value="{{ category.name }}">{{ category.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Image URL
+                <input type="text" name="category_image_url" placeholder="https://...">
+            </label>
+            <button type="submit" class="button secondary">Save</button>
+        </form>
+        <ul class="admin-list">
+            {% for category in categories %}
+                <li class="admin-list-item">
+                    {% if category.image_url %}
+                        <img src="{{ category.image_url }}" alt="{{ category.name }}" loading="lazy" decoding="async">
+                    {% endif %}
+                    <div>
+                        <div class="title">{{ category.name }}</div>
+                        <div class="meta">{{ category.image_url or "No image" }}</div>
+                    </div>
+                    {% if category.image_url %}
+                        <div class="admin-item-actions">
+                            <form method="post" class="inline-form" data-confirm="Remove the image for {{ category.name }}?">
+                                <input type="hidden" name="action" value="delete_category_image">
+                                <input type="hidden" name="category_name" value="{{ category.name }}">
+                                <button type="submit" class="button small danger">Remove</button>
+                            </form>
+                        </div>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="card admin-section">
+        <h2>Subcategory Icons</h2>
+        <p>Recommended size: 200x200 px.</p>
+        <form method="post">
+            <input type="hidden" name="action" value="add_subcategory_image">
+            <label>
+                Subcategory
+                <select name="subcategory_name" required>
+                    <option value="">Select subcategory</option>
+                    {% for subcategory in subcategories %}
+                        <option value="{{ subcategory.name }}">{{ subcategory.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Parent Category (optional)
+                <select name="subcategory_category">
+                    <option value="">Select category</option>
+                    {% for category in categories %}
+                        <option value="{{ category.name }}">{{ category.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Image URL
+                <input type="text" name="subcategory_image_url" placeholder="https://...">
+            </label>
+            <button type="submit" class="button secondary">Save</button>
+        </form>
+        <ul class="admin-list">
+            {% for subcategory in subcategories %}
+                <li class="admin-list-item">
+                    {% if subcategory.image_url %}
+                        <img src="{{ subcategory.image_url }}" alt="{{ subcategory.name }}" loading="lazy" decoding="async">
+                    {% endif %}
+                    <div>
+                        <div class="title">{{ subcategory.name }}</div>
+                        <div class="meta">{{ subcategory.category_name or "Unassigned" }}</div>
+                        <div class="meta">{{ subcategory.image_url or "No image" }}</div>
+                    </div>
+                    {% if subcategory.image_url %}
+                        <div class="admin-item-actions">
+                            <form method="post" class="inline-form" data-confirm="Remove the image for {{ subcategory.name }}?">
+                                <input type="hidden" name="action" value="delete_subcategory_image">
+                                <input type="hidden" name="subcategory_name" value="{{ subcategory.name }}">
+                                <button type="submit" class="button small danger">Remove</button>
+                            </form>
+                        </div>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+    <div class="card admin-section">
+        <h2>Sub-subcategory Icons</h2>
+        <p>Recommended size: 200x200 px.</p>
+        <form method="post">
+            <input type="hidden" name="action" value="add_sub_subcategory_image">
+            <label>
+                Sub-subcategory
+                <select name="sub_subcategory_name" required>
+                    <option value="">Select sub-subcategory</option>
+                    {% for sub_subcategory in sub_subcategories %}
+                        <option value="{{ sub_subcategory.name }}">{{ sub_subcategory.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Parent Subcategory (optional)
+                <select name="sub_subcategory_parent">
+                    <option value="">Select subcategory</option>
+                    {% for subcategory in subcategories %}
+                        <option value="{{ subcategory.name }}">{{ subcategory.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Image URL
+                <input type="text" name="sub_subcategory_image_url" placeholder="https://...">
+            </label>
+            <button type="submit" class="button secondary">Save</button>
+        </form>
+        <ul class="admin-list">
+            {% for sub_subcategory in sub_subcategories %}
+                <li class="admin-list-item">
+                    {% if sub_subcategory.image_url %}
+                        <img src="{{ sub_subcategory.image_url }}" alt="{{ sub_subcategory.name }}" loading="lazy" decoding="async">
+                    {% endif %}
+                    <div>
+                        <div class="title">{{ sub_subcategory.name }}</div>
+                        <div class="meta">{{ sub_subcategory.subcategory_name or "Unassigned" }}</div>
+                        <div class="meta">{{ sub_subcategory.image_url or "No image" }}</div>
+                    </div>
+                    {% if sub_subcategory.image_url %}
+                        <div class="admin-item-actions">
+                            <form method="post" class="inline-form" data-confirm="Remove the image for {{ sub_subcategory.name }}?">
+                                <input type="hidden" name="action" value="delete_sub_subcategory_image">
+                                <input type="hidden" name="sub_subcategory_name" value="{{ sub_subcategory.name }}">
+                                <button type="submit" class="button small danger">Remove</button>
+                            </form>
+                        </div>
+                    {% endif %}
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block body_class %}mobile-dashboard-page mobile-ui{% endblock %}
+
+{% block content %}
+<header class="app-header with-back">
+    <a class="back-button" href="{{ url_for('home') }}" aria-label="Back">←</a>
+    <h1>Dashboard</h1>
+    <div class="header-actions">
+        <a class="icon-button" href="{{ url_for('orders_mobile') }}" aria-label="Orders">🧾</a>
+    </div>
+</header>
+
+<section class="mobile-card welcome-card">
+    <div class="avatar-circle">{{ session.get('user', {}).get('name', 'A')[:1] }}</div>
+    <div>
+        <div class="welcome-label">Welcome</div>
+        <div class="welcome-name">{{ session.get('user', {}).get('name', 'Sales Rep') }}</div>
+    </div>
+</section>
+
+<section class="dashboard-tiles">
+    {% for tile in tiles %}
+        <a class="dashboard-tile {{ tile.class }}" href="{{ tile.link }}">
+            <div class="tile-icon" aria-hidden="true">{{ tile.icon }}</div>
+            <div class="tile-content">
+                <div class="tile-count">{{ tile.count }}</div>
+                <div class="tile-label">{{ tile.label }}</div>
+            </div>
+        </a>
+    {% endfor %}
+</section>
+
+<nav class="mobile-bottom-nav">
+    <a class="active" href="{{ url_for('dashboard_mobile') }}">Dashboard</a>
+    <a href="{{ url_for('orders_mobile') }}">Orders</a>
+    <span>Profile</span>
+    <span>Payments</span>
+    <span>Search</span>
+</nav>
+{% endblock %}

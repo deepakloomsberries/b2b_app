@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block body_class %}mobile-ui{% endblock %}
+
+{% block content %}
+<header class="app-header with-back">
+    <form method="post" action="{{ url_for('catalog_resume', customer_id=customer.id) }}" id="back-to-catalog-form">
+        <input type="hidden" name="items_json" id="back-items-json" value="[]">
+        <button type="submit" class="back-button" aria-label="Back">←</button>
+    </form>
+    <h1>Cart</h1>
+</header>
+
+<p class="cart-note">All prices are exclusive of taxes.</p>
+
+<form method="post" action="{{ url_for('place_order') }}" id="review-form">
+    <input type="hidden" name="customer_id" value="{{ customer.id }}">
+    <input type="hidden" name="items_json" id="items-json" value="[]">
+
+    <div class="cart-list">
+        {% for item in items %}
+            <div class="cart-item" data-sku="{{ item.sku }}" data-qty="{{ item.qty }}" data-price="{{ item.price_base }}">
+                <button type="button" class="cart-remove" aria-label="Remove item">×</button>
+                <div class="cart-image">
+                    {% if item.image_url %}
+                        <img src="{{ item.image_url }}" alt="{{ item.title }}">
+                    {% else %}
+                        <div class="placeholder">No Image</div>
+                    {% endif %}
+                </div>
+                <div class="cart-body">
+                    <div class="cart-title">{{ item.title }}</div>
+                    <div class="cart-meta">ID: {{ item.sku }}</div>
+                    <div class="cart-meta">Unit: item</div>
+                    <div class="cart-meta">MOQ: 0</div>
+                    <div class="cart-price">{{ currency_symbol }} {{ '%.2f'|format(item.price_base) }}</div>
+                    <div class="cart-meta">Balance Stock: -</div>
+                    <div class="qty-control cart-qty">
+                        <button type="button" class="qty-btn" data-action="minus">-</button>
+                        <input type="number" min="0" value="{{ item.qty }}" class="qty-input">
+                        <button type="button" class="qty-btn" data-action="plus">+</button>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+
+    <div class="cart-totals">
+        <div class="cart-line"><span>Sub Total</span><span>{{ currency_symbol }} <span id="subtotal">0.00</span></span></div>
+        <div class="cart-line"><span>Tax</span><span>{{ currency_symbol }} <span id="tax">0.00</span></span></div>
+        <div class="cart-line"><span>Shipping Cost</span><span>{{ currency_symbol }} <span id="shipping">0.00</span></span></div>
+        <div class="cart-line total"><span>Grand Total</span><span>{{ currency_symbol }} <span id="total">0.00</span></span></div>
+    </div>
+    <label class="cart-remark">
+        Order Remarks
+        <textarea name="order_remarks" rows="3" placeholder="Add any notes for this order"></textarea>
+    </label>
+    <button type="submit" id="confirm-order" class="button primary wide" disabled>Place Order</button>
+</form>
+
+<script>
+    const items = Array.from(document.querySelectorAll('.cart-item'));
+    const subtotalEl = document.getElementById('subtotal');
+    const taxEl = document.getElementById('tax');
+    const shippingEl = document.getElementById('shipping');
+    const totalEl = document.getElementById('total');
+    const itemsJsonInput = document.getElementById('items-json');
+    const confirmBtn = document.getElementById('confirm-order');
+    const reviewForm = document.getElementById('review-form');
+    const backItemsInput = document.getElementById('back-items-json');
+    const TAX_RATE = 0.15;
+    const customerId = '{{ customer.id }}';
+    const cartStorageKey = customerId ? `sales_cart_${customerId}` : null;
+
+    const syncCartStorage = (payload) => {
+        if (!cartStorageKey || !window.localStorage) {
+            return;
+        }
+        window.localStorage.setItem(cartStorageKey, JSON.stringify(payload));
+    };
+
+    const buildPayload = () => {
+        const payload = items
+            .filter((item) => item.dataset.removed !== 'true')
+            .map((item) => ({
+                sku: item.dataset.sku,
+                qty: parseInt(item.dataset.qty, 10),
+            }))
+            .filter((item) => item.qty > 0);
+        itemsJsonInput.value = JSON.stringify(payload);
+        if (backItemsInput) {
+            backItemsInput.value = itemsJsonInput.value;
+        }
+        syncCartStorage(payload);
+
+        const subtotal = payload.reduce((sum, item) => {
+            const row = items.find((entry) => entry.dataset.sku === item.sku);
+            const price = row ? parseFloat(row.dataset.price) : 0;
+            return sum + price * item.qty;
+        }, 0);
+        subtotalEl.textContent = subtotal.toFixed(2);
+        const tax = subtotal * TAX_RATE;
+        taxEl.textContent = tax.toFixed(2);
+        shippingEl.textContent = '0.00';
+        totalEl.textContent = (subtotal + tax).toFixed(2);
+        confirmBtn.disabled = payload.length === 0;
+    };
+
+    items.forEach((item) => {
+        item.querySelector('.cart-remove').addEventListener('click', () => {
+            item.dataset.removed = 'true';
+            item.style.display = 'none';
+            buildPayload();
+        });
+        const input = item.querySelector('.qty-input');
+        const buttons = item.querySelectorAll('.qty-btn');
+        buttons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const current = parseInt(input.value || '0', 10);
+                const next = btn.dataset.action === 'plus' ? current + 1 : current - 1;
+                input.value = Math.max(0, next);
+                item.dataset.qty = input.value;
+                buildPayload();
+            });
+        });
+        input.addEventListener('change', () => {
+            const value = parseInt(input.value || '0', 10);
+            input.value = Number.isNaN(value) ? 0 : Math.max(0, value);
+            item.dataset.qty = input.value;
+            buildPayload();
+        });
+    });
+
+    buildPayload();
+
+
+    reviewForm?.addEventListener('submit', () => {
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = 'Submitting...';
+    });
+</script>
+{% endblock %}

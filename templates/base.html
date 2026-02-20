@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>B2B Order App</title>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <meta name="theme-color" content="#1f6feb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="B2B Orders">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='icons/app-icon.svg') }}" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/app-icon.svg') }}">
+</head>
+<body class="{% block body_class %}{% endblock %} app-animated">
+    <div class="loading-overlay" id="loading-overlay">
+        <div class="spinner"></div>
+        <span>Loading...</span>
+    </div>
+    <header class="top-bar">
+        <div class="logo"><img src="{{ url_for('static', filename='icons/app-icon.svg') }}" alt="B2B Order App logo"><span>B2B Order App</span></div>
+        {% if session.get('user') %}
+            <button class="notification-toggle" type="button" aria-label="Open notifications" aria-expanded="false">
+                <span class="notification-icon">🔔</span>
+                <span class="notification-badge" hidden>0</span>
+            </button>
+            <nav class="desktop-nav">
+                <span class="user-pill">Hi, {{ session.get('user').get('name') }}</span>
+                <a href="{{ url_for('home') }}">Home</a>
+                <a href="{{ url_for('customers_list') }}">Customers</a>
+                <a href="{{ url_for('drafts_list') }}">Drafts</a>
+                <a href="{{ url_for('orders_list') }}">Orders</a>
+                {% if session.get('user', {}).get('role') == 'admin' %}
+                    <a href="{{ url_for('admin') }}">Admin</a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}">Logout</a>
+            </nav>
+            <button class="menu-toggle" type="button" aria-label="Open menu" aria-expanded="false">
+                ☰
+            </button>
+        {% endif %}
+    </header>
+    {% if session.get('user') %}
+        <div class="mobile-menu" id="mobile-menu" hidden>
+            <div class="mobile-menu-header">
+                <div class="user-pill">Hi, {{ session.get('user').get('name') }}</div>
+                <button class="menu-close" type="button" aria-label="Close menu">×</button>
+            </div>
+            <nav class="mobile-nav">
+                <a href="{{ url_for('home') }}">Home</a>
+                <a href="{{ url_for('customers_list') }}">Customers</a>
+                <a href="{{ url_for('drafts_list') }}">Drafts</a>
+                <a href="{{ url_for('orders_list') }}">Orders</a>
+                {% if session.get('user', {}).get('role') == 'admin' %}
+                    <a href="{{ url_for('admin') }}">Admin</a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}">Logout</a>
+            </nav>
+        </div>
+    {% endif %}
+
+    {% if session.get('user') %}
+    <section class="notification-panel" id="notification-panel" hidden>
+        <div class="notification-panel-header">
+            <div>
+                <h2>Notifications</h2>
+                <p class="muted">Updates for {{ session.get('user').get('role', 'user')|capitalize }} team.</p>
+            </div>
+            <button class="button small secondary" type="button" id="enable-desktop-notifications">Enable desktop alerts</button>
+        </div>
+        <ul class="notification-list" id="notification-list"></ul>
+        <div class="notification-empty" id="notification-empty">No notifications yet.</div>
+    </section>
+    {% endif %}
+
+    <main class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            <div class="flash-messages">
+              {% for category, message in messages %}
+                <div class="flash {{ category }}">{{ message }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </main>
+
+    <script>
+        const hideLoadingOverlay = () => {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
+        };
+
+        window.addEventListener('DOMContentLoaded', hideLoadingOverlay);
+        window.addEventListener('load', hideLoadingOverlay);
+    </script>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+            });
+        }
+    </script>
+
+    {% if session.get('user') %}
+    <script>
+        const menuToggle = document.querySelector('.menu-toggle');
+        const mobileMenu = document.getElementById('mobile-menu');
+        const menuClose = document.querySelector('.menu-close');
+
+        const closeMenu = () => {
+            mobileMenu.hidden = true;
+            menuToggle.setAttribute('aria-expanded', 'false');
+            document.body.classList.remove('menu-open');
+        };
+
+        const openMenu = () => {
+            mobileMenu.hidden = false;
+            menuToggle.setAttribute('aria-expanded', 'true');
+            document.body.classList.add('menu-open');
+        };
+
+        menuToggle?.addEventListener('click', () => {
+            if (mobileMenu.hidden) {
+                openMenu();
+            } else {
+                closeMenu();
+            }
+        });
+
+        menuClose?.addEventListener('click', closeMenu);
+        mobileMenu?.addEventListener('click', (event) => {
+            if (event.target === mobileMenu) {
+                closeMenu();
+            }
+        });
+    </script>
+    <script>
+        const notificationToggle = document.querySelector('.notification-toggle');
+        const notificationPanel = document.getElementById('notification-panel');
+        const notificationList = document.getElementById('notification-list');
+        const notificationEmpty = document.getElementById('notification-empty');
+        const notificationBadge = document.querySelector('.notification-badge');
+        const enableDesktopBtn = document.getElementById('enable-desktop-notifications');
+        const notificationSeenKey = 'seenNotifications';
+        const loadSeenNotifications = () => {
+            try {
+                const raw = localStorage.getItem(notificationSeenKey);
+                const parsed = raw ? JSON.parse(raw) : [];
+                if (Array.isArray(parsed)) {
+                    return new Set(parsed);
+                }
+            } catch (error) {
+                // Ignore storage errors
+            }
+            return new Set();
+        };
+        const seenNotifications = loadSeenNotifications();
+        const persistSeenNotifications = () => {
+            try {
+                const values = Array.from(seenNotifications).slice(-200);
+                localStorage.setItem(notificationSeenKey, JSON.stringify(values));
+            } catch (error) {
+                // Ignore storage errors
+            }
+        };
+
+        const closeNotifications = () => {
+            if (notificationPanel) {
+                notificationPanel.hidden = true;
+                notificationToggle?.setAttribute('aria-expanded', 'false');
+            }
+        };
+
+        const openNotifications = () => {
+            if (notificationPanel) {
+                notificationPanel.hidden = false;
+                notificationToggle?.setAttribute('aria-expanded', 'true');
+            }
+        };
+
+        notificationToggle?.addEventListener('click', () => {
+            if (notificationPanel?.hidden) {
+                openNotifications();
+            } else {
+                closeNotifications();
+            }
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!notificationPanel || notificationPanel.hidden) {
+                return;
+            }
+            if (!notificationPanel.contains(event.target) && !notificationToggle?.contains(event.target)) {
+                closeNotifications();
+            }
+        });
+
+        const updateBadge = (count) => {
+            if (!notificationBadge) {
+                return;
+            }
+            notificationBadge.textContent = count > 9 ? '9+' : String(count);
+            notificationBadge.hidden = count === 0;
+        };
+
+        const markNotificationRead = async (notificationId) => {
+            await fetch('/notifications/read', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ notification_id: notificationId }),
+            });
+            seenNotifications.add(notificationId);
+            persistSeenNotifications();
+        };
+
+        const renderNotifications = (items) => {
+            if (!notificationList || !notificationEmpty) {
+                return;
+            }
+            notificationList.innerHTML = '';
+            if (!items.length) {
+                notificationEmpty.hidden = false;
+                updateBadge(0);
+                return;
+            }
+            notificationEmpty.hidden = true;
+            const unreadCount = items.filter((item) => !item.is_read).length;
+            updateBadge(unreadCount);
+
+            items.forEach((item) => {
+                const listItem = document.createElement('li');
+                listItem.className = `notification-item priority-${item.priority} ${item.is_read ? 'is-read' : 'is-unread'}`;
+                const meta = document.createElement('div');
+                meta.className = 'notification-meta';
+                meta.textContent = new Date(item.created_at).toLocaleString();
+
+                const title = document.createElement('div');
+                title.className = 'notification-title';
+                title.textContent = item.title;
+
+                const message = document.createElement('div');
+                message.className = 'notification-message';
+                message.textContent = item.message;
+
+                const actions = document.createElement('div');
+                actions.className = 'notification-actions';
+
+                if (item.action_url) {
+                    const link = document.createElement('a');
+                    link.href = item.action_url;
+                    link.className = 'button small secondary';
+                    link.textContent = 'Open';
+                    actions.appendChild(link);
+                }
+
+                if (!item.is_read) {
+                    const markButton = document.createElement('button');
+                    markButton.type = 'button';
+                    markButton.className = 'button small';
+                    markButton.textContent = 'Mark read';
+                    markButton.addEventListener('click', async () => {
+                        await markNotificationRead(item.id);
+                        item.is_read = true;
+                        renderNotifications(items);
+                    });
+                    actions.appendChild(markButton);
+                }
+
+                listItem.appendChild(meta);
+                listItem.appendChild(title);
+                listItem.appendChild(message);
+                if (actions.children.length) {
+                    listItem.appendChild(actions);
+                }
+                notificationList.appendChild(listItem);
+            });
+        };
+
+        const maybeShowDesktopAlert = (items) => {
+            if (!('Notification' in window) || Notification.permission !== 'granted') {
+                return;
+            }
+            items.forEach((item) => {
+                if (item.is_read || seenNotifications.has(item.id)) {
+                    return;
+                }
+                seenNotifications.add(item.id);
+                new Notification(item.title, {
+                    body: item.message,
+                    tag: `notification-${item.id}`,
+                });
+            });
+            persistSeenNotifications();
+        };
+
+        const fetchNotifications = async () => {
+            try {
+                const response = await fetch('/notifications');
+                if (!response.ok) {
+                    return;
+                }
+                const data = await response.json();
+                const items = data.notifications || [];
+                renderNotifications(items);
+                maybeShowDesktopAlert(items);
+            } catch (error) {
+                // Ignore fetch errors
+            }
+        };
+
+        const updateDesktopButton = () => {
+            if (!enableDesktopBtn || !('Notification' in window)) {
+                return;
+            }
+            const status = Notification.permission;
+            if (status === 'granted') {
+                enableDesktopBtn.textContent = 'Desktop alerts enabled';
+                enableDesktopBtn.disabled = true;
+            } else if (status === 'denied') {
+                enableDesktopBtn.textContent = 'Desktop alerts blocked';
+                enableDesktopBtn.disabled = true;
+            } else {
+                enableDesktopBtn.textContent = 'Enable desktop alerts';
+                enableDesktopBtn.disabled = false;
+            }
+        };
+
+        enableDesktopBtn?.addEventListener('click', async () => {
+            if (!('Notification' in window)) {
+                return;
+            }
+            await Notification.requestPermission();
+            updateDesktopButton();
+        });
+
+        updateDesktopButton();
+        fetchNotifications();
+        setInterval(fetchNotifications, 60000);
+    </script>
+    {% endif %}
+</body>
+</html>
