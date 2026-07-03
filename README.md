@@ -91,6 +91,17 @@ Run the stock sync script on a schedule to pull quantities from Google Sheets:
 
 The stock sheet must have SKU in column A and quantity in column B, with a header row.
 
+## Running Tests
+
+```bash
+pip install -r requirements-dev.txt
+pytest
+```
+
+Tests run against a fresh, isolated SQLite database per test (created in a temp
+directory) and cover authentication/lockout, CSRF enforcement, role-based
+authorization on order management, order placement, and CSV export escaping.
+
 ## Running as a systemd Service
 
 ```ini
