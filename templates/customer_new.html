@@ -9,6 +9,7 @@
 </header>
 
 <form method="post" class="app-form">
+    {% include "_csrf_field.html" %}
     <label class="form-field">
         <span>Business Name *</span>
         <input type="text" name="name" required>

@@ -918,6 +918,7 @@ saveDraftBtn.addEventListener('click', async () => {
         method: 'POST',
         headers: {
             'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || '',
         },
         body: new URLSearchParams({
             customer_id: customerIdInput.value,

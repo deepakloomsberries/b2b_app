@@ -1,5 +1,6 @@
 import csv
 import io
+import secrets
 import sqlite3
 import json
 import os
@@ -111,6 +112,32 @@ def require_login():
         return redirect(url_for("login"))
     session.permanent = True
     session.modified = True
+    return None
+
+
+CSRF_SESSION_KEY = "_csrf_token"
+
+
+def get_csrf_token():
+    token = session.get(CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session[CSRF_SESSION_KEY] = token
+    return token
+
+
+app.jinja_env.globals["csrf_token"] = get_csrf_token
+
+
+@app.before_request
+def enforce_csrf():
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+    expected = session.get(CSRF_SESSION_KEY)
+    submitted = request.form.get("csrf_token") or request.headers.get("X-CSRFToken")
+    if not expected or not submitted or not secrets.compare_digest(submitted, expected):
+        flash("Your session expired. Please try again.", "error")
+        return redirect(request.referrer or url_for("home"))
     return None
 
 
@@ -721,38 +748,27 @@ def mark_notification_read():
 @app.route("/customers")
 def customers_list():
     query = request.args.get("q", "").strip()
+    where_clause = "WHERE c.name LIKE ?" if query else ""
+    params = (f"%{query}%",) if query else ()
     with get_db() as conn:
-        if query:
-            customers = conn.execute(
-                "SELECT * FROM customers WHERE name LIKE ? ORDER BY name",
-                (f"%{query}%",),
-            ).fetchall()
-        else:
-            customers = conn.execute("SELECT * FROM customers ORDER BY name").fetchall()
-        enriched_customers = []
-        for customer in customers:
-            last_order = conn.execute(
-                "SELECT id, created_at FROM orders WHERE customer_id = ? "
-                "ORDER BY created_at DESC LIMIT 1",
-                (customer["id"],),
-            ).fetchone()
-            last_order_total = 0
-            if last_order:
-                last_order_total = (
-                    conn.execute(
-                        "SELECT COALESCE(SUM(qty * price_snapshot), 0) AS total "
-                        "FROM order_items WHERE order_id = ?",
-                        (last_order["id"],),
-                    ).fetchone()["total"]
-                    or 0
-                )
-            enriched_customers.append(
-                {
-                    **dict(customer),
-                    "last_order_date": last_order["created_at"] if last_order else None,
-                    "last_order_total": last_order_total,
-                }
-            )
+        rows = conn.execute(
+            "SELECT c.*, lo.created_at AS last_order_date, "
+            "COALESCE(t.total, 0) AS last_order_total "
+            "FROM customers c "
+            "LEFT JOIN ("
+            "  SELECT customer_id, id, created_at, "
+            "         ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY created_at DESC) AS rn "
+            "  FROM orders"
+            ") lo ON lo.customer_id = c.id AND lo.rn = 1 "
+            "LEFT JOIN ("
+            "  SELECT order_id, SUM(qty * price_snapshot) AS total "
+            "  FROM order_items GROUP BY order_id"
+            ") t ON t.order_id = lo.id "
+            f"{where_clause} "
+            "ORDER BY c.name",
+            params,
+        ).fetchall()
+    enriched_customers = [dict(row) for row in rows]
     return render_template(
         "customers_list.html", customers=enriched_customers, query=query
     )

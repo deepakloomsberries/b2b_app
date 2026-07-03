@@ -24,11 +24,11 @@ This project is a self-hosted internal tool. The following are in scope:
 
 ## Known Limitations
 
-- CSRF protection is not currently implemented. It is recommended to run this app behind a reverse proxy restricted to trusted networks.
 - The app uses SQLite, which is not suitable for high-concurrency multi-process deployments.
 
 ## Implemented Protections
 
-- Login attempts are rate-limited: an account is locked for 15 minutes after 5 consecutive failed login attempts (tracked per-username in the database).
+- CSRF protection: every state-changing request (POST/PUT/PATCH/DELETE) must carry a per-session token, submitted via a hidden form field or an `X-CSRFToken` header for JSON/fetch requests. Requests with a missing, forged, or cross-session token are rejected.
+- Login attempts are rate-limited: an account is locked for 15 minutes after 5 consecutive failed login attempts, tracked against the resolved account (not the raw typed username/email) so alternating between the two doesn't double the attempt budget.
 - CSV downloads (order export, bulk order export) and Google Sheets order export sanitize cell values that start with `=`, `+`, `-`, or `@` to prevent formula/CSV injection when opened in Excel or Sheets.
 - Order status changes, order assignment, and bulk order actions require the `warehouse` or `admin` role.

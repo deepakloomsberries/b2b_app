@@ -73,6 +73,7 @@
     <div class="card admin-section">
         <h2>{{ "Edit Item" if edit_product else "Add Item" }}</h2>
         <form method="post" class="form-card compact admin-form-grid">
+            {% include "_csrf_field.html" %}
             <input type="hidden" name="action" value="save_item">
             <label>
                 SKU
@@ -147,6 +148,7 @@
         </form>
         {% if edit_product %}
             <form method="post" class="inline-form danger-zone">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="delete_item">
                 <input type="hidden" name="sku" value="{{ edit_product.sku }}">
                 <button type="submit" class="button danger small">Hide Item</button>
@@ -175,6 +177,7 @@
         <h2>Category Icons</h2>
         <p>Recommended size: 200x200 px.</p>
         <form method="post">
+            {% include "_csrf_field.html" %}
             <input type="hidden" name="action" value="add_category_image">
             <label>
                 Category
@@ -204,6 +207,7 @@
                     {% if category.image_url %}
                         <div class="admin-item-actions">
                             <form method="post" class="inline-form" data-confirm="Remove the image for {{ category.name }}?">
+                                {% include "_csrf_field.html" %}
                                 <input type="hidden" name="action" value="delete_category_image">
                                 <input type="hidden" name="category_name" value="{{ category.name }}">
                                 <button type="submit" class="button small danger">Remove</button>
@@ -218,6 +222,7 @@
         <h2>Subcategory Icons</h2>
         <p>Recommended size: 200x200 px.</p>
         <form method="post">
+            {% include "_csrf_field.html" %}
             <input type="hidden" name="action" value="add_subcategory_image">
             <label>
                 Subcategory
@@ -257,6 +262,7 @@
                     {% if subcategory.image_url %}
                         <div class="admin-item-actions">
                             <form method="post" class="inline-form" data-confirm="Remove the image for {{ subcategory.name }}?">
+                                {% include "_csrf_field.html" %}
                                 <input type="hidden" name="action" value="delete_subcategory_image">
                                 <input type="hidden" name="subcategory_name" value="{{ subcategory.name }}">
                                 <button type="submit" class="button small danger">Remove</button>
@@ -271,6 +277,7 @@
         <h2>Sub-subcategory Icons</h2>
         <p>Recommended size: 200x200 px.</p>
         <form method="post">
+            {% include "_csrf_field.html" %}
             <input type="hidden" name="action" value="add_sub_subcategory_image">
             <label>
                 Sub-subcategory
@@ -310,6 +317,7 @@
                     {% if sub_subcategory.image_url %}
                         <div class="admin-item-actions">
                             <form method="post" class="inline-form" data-confirm="Remove the image for {{ sub_subcategory.name }}?">
+                                {% include "_csrf_field.html" %}
                                 <input type="hidden" name="action" value="delete_sub_subcategory_image">
                                 <input type="hidden" name="sub_subcategory_name" value="{{ sub_subcategory.name }}">
                                 <button type="submit" class="button small danger">Remove</button>

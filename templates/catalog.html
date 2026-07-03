@@ -98,6 +98,7 @@
 </dialog>
 
 <form id="order-form" method="post" action="{{ url_for('review_order') }}">
+    {% include "_csrf_field.html" %}
     <input type="hidden" name="customer_id" value="{{ customer.id }}">
     <input type="hidden" name="items_json" id="items-json" value="[]">
 

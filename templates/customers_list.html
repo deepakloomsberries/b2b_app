@@ -39,6 +39,7 @@
                             <span>Last order value: SAR {{ '%.2f'|format(customer.last_order_total or 0) }}</span>
                         </div>
                         <form method="post" action="{{ url_for('update_customer_priority', customer_id=customer.id) }}" class="buyer-priority-form">
+                            {% include "_csrf_field.html" %}
                             <label>
                                 Priority
                                 <select name="priority_flag">
@@ -55,6 +56,7 @@
                             <button type="submit" class="outline-button">Update Summary</button>
                         </form>
                         <form method="post" action="{{ url_for('customer_visit', customer_id=customer.id) }}">
+                            {% include "_csrf_field.html" %}
                             <button type="submit" class="outline-button">Mark Visited</button>
                         </form>
                     </details>

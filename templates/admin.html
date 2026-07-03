@@ -42,6 +42,7 @@
                 <a class="button secondary small" href="{{ url_for('download_catalogue_sample') }}">Download sample file</a>
             </div>
             <form method="post" enctype="multipart/form-data">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="upload_catalogue">
                 <label>
                     Upload mode
@@ -58,6 +59,7 @@
             <h2>Stock Sync</h2>
             <p>Sync stock from Google Sheets.</p>
             <form method="post">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="sync_stock">
                 <button type="submit" class="button secondary">Sync Stock Now</button>
             </form>
@@ -66,6 +68,7 @@
             <h2>Export Failed Orders</h2>
             <p>Retry exporting any failed orders.</p>
             <form method="post">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="retry_exports">
                 <button type="submit" class="button secondary">Retry Export Failed Orders</button>
             </form>
@@ -79,6 +82,7 @@
             <h2>Stock Adjustment</h2>
             <p>Manually set stock for a SKU.</p>
             <form method="post">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="adjust_stock">
                 <label>
                     SKU
@@ -100,6 +104,7 @@
             <h2>Category Images</h2>
             <p>Recommended size: 200x200 px.</p>
             <form method="post">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="add_category_image">
                 <label>
                     Category
@@ -129,6 +134,7 @@
                         {% if category.image_url %}
                             <div class="admin-item-actions">
                                 <form method="post" class="inline-form" data-confirm="Remove the image for {{ category.name }}?">
+                                    {% include "_csrf_field.html" %}
                                     <input type="hidden" name="action" value="delete_category_image">
                                     <input type="hidden" name="category_name" value="{{ category.name }}">
                                     <button type="submit" class="button small danger">Remove</button>
@@ -143,6 +149,7 @@
             <h2>Subcategory Images</h2>
             <p>Recommended size: 200x200 px.</p>
             <form method="post">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="add_subcategory_image">
                 <label>
                     Subcategory
@@ -182,6 +189,7 @@
                         {% if subcategory.image_url %}
                             <div class="admin-item-actions">
                                 <form method="post" class="inline-form" data-confirm="Remove the image for {{ subcategory.name }}?">
+                                    {% include "_csrf_field.html" %}
                                     <input type="hidden" name="action" value="delete_subcategory_image">
                                     <input type="hidden" name="subcategory_name" value="{{ subcategory.name }}">
                                     <button type="submit" class="button small danger">Remove</button>
@@ -196,6 +204,7 @@
             <h2>Sub-subcategory Images</h2>
             <p>Recommended size: 200x200 px.</p>
             <form method="post">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="add_sub_subcategory_image">
                 <label>
                     Sub-subcategory
@@ -235,6 +244,7 @@
                         {% if sub_subcategory.image_url %}
                             <div class="admin-item-actions">
                                 <form method="post" class="inline-form" data-confirm="Remove the image for {{ sub_subcategory.name }}?">
+                                    {% include "_csrf_field.html" %}
                                     <input type="hidden" name="action" value="delete_sub_subcategory_image">
                                     <input type="hidden" name="sub_subcategory_name" value="{{ sub_subcategory.name }}">
                                     <button type="submit" class="button small danger">Remove</button>
@@ -288,6 +298,7 @@
                             <div class="meta">SKU: {{ product.sku }}</div>
                         </div>
                         <form method="post" class="inline-form">
+                            {% include "_csrf_field.html" %}
                             <input type="hidden" name="action" value="toggle_product_visibility">
                             <input type="hidden" name="sku" value="{{ product.sku }}">
                             <input type="hidden" name="is_active" value="{{ 0 if product.is_active else 1 }}">
@@ -309,6 +320,7 @@
         <div class="card admin-section">
             <h2>User Management</h2>
             <form method="post" class="form-card compact">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="add_user">
                 <label>
                     Name
@@ -354,6 +366,7 @@
                             <td>{{ user.phone or "" }}</td>
                             <td>
                                 <form method="post" class="inline-form">
+                                    {% include "_csrf_field.html" %}
                                     <input type="hidden" name="action" value="update_user_role">
                                     <input type="hidden" name="user_id" value="{{ user.id }}">
                                     <select name="user_role">
@@ -368,6 +381,7 @@
                                 <div class="table-actions">
                                     <button type="button" class="button small secondary reset-password-btn" data-user-id="{{ user.id }}" data-user-name="{{ user.name }}">Reset Password</button>
                                     <form method="post" data-confirm="Delete {{ user.name }}? This cannot be undone.">
+                                        {% include "_csrf_field.html" %}
                                         <input type="hidden" name="action" value="delete_user">
                                         <input type="hidden" name="user_id" value="{{ user.id }}">
                                         <button type="submit" class="button small danger">Delete</button>
@@ -392,6 +406,7 @@
             <h2>Team Notifications</h2>
             <p>Send updates to warehouse, admin, or all users.</p>
             <form method="post" class="form-card compact">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="create_notification">
                 <label>
                     Title
@@ -446,6 +461,7 @@
                         </div>
                         <div class="admin-item-actions">
                             <form method="post" data-confirm="Delete this notification?">
+                                {% include "_csrf_field.html" %}
                                 <input type="hidden" name="action" value="delete_notification">
                                 <input type="hidden" name="notification_id" value="{{ notification.id }}">
                                 <button type="submit" class="button small danger">Delete</button>
@@ -466,6 +482,7 @@
             <h2>Customer Management</h2>
             <p>Add, edit, or remove buyer details.</p>
             <form method="post" class="form-card compact">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="add_customer">
                 <label>
                     Business Name
@@ -558,6 +575,7 @@
                             <details>
                                 <summary class="button small secondary">Edit</summary>
                                 <form method="post" class="form-card compact">
+                                    {% include "_csrf_field.html" %}
                                     <input type="hidden" name="action" value="update_customer">
                                     <input type="hidden" name="customer_id" value="{{ customer.id }}">
                                     <label>
@@ -643,6 +661,7 @@
                                 </form>
                             </details>
                             <form method="post" data-confirm="Delete {{ customer.name }}? This cannot be undone.">
+                                {% include "_csrf_field.html" %}
                                 <input type="hidden" name="action" value="delete_customer">
                                 <input type="hidden" name="customer_id" value="{{ customer.id }}">
                                 <button type="submit" class="button small danger">Delete</button>
@@ -745,6 +764,7 @@
         <div class="card admin-section">
             <h2>Stock &amp; Order Settings</h2>
             <form method="post">
+                {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="save_settings">
 
                 <label class="toggle-label">
@@ -813,6 +833,7 @@
 <dialog id="reset-password-modal" class="modal">
     <div class="modal-surface">
         <form method="post" class="form-card">
+            {% include "_csrf_field.html" %}
             <input type="hidden" name="action" value="reset_user_password">
             <input type="hidden" name="user_id" id="reset-user-id">
             <h3>Reset Password</h3>

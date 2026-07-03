@@ -5,6 +5,7 @@
 {% block content %}
 <header class="app-header with-back">
     <form method="post" action="{{ url_for('catalog_resume', customer_id=customer.id) }}" id="back-to-catalog-form">
+        {% include "_csrf_field.html" %}
         <input type="hidden" name="items_json" id="back-items-json" value="[]">
         <button type="submit" class="back-button" aria-label="Back">←</button>
     </form>
@@ -14,6 +15,7 @@
 <p class="cart-note">All prices are exclusive of taxes.</p>
 
 <form method="post" action="{{ url_for('place_order') }}" id="review-form">
+    {% include "_csrf_field.html" %}
     <input type="hidden" name="customer_id" value="{{ customer.id }}">
     <input type="hidden" name="items_json" id="items-json" value="[]">
 
