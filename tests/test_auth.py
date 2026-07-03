@@ -39,6 +39,21 @@ def test_post_with_forged_csrf_token_is_rejected(client, app_module):
     assert b"session expired" in response.data.lower()
 
 
+def test_fetch_style_post_gets_json_error_not_redirect_on_bad_csrf(client):
+    # A JS fetch() call identifies itself by sending the token via header
+    # instead of a form field. If CSRF fails, it must get a real error
+    # status (fetch() auto-follows redirects and would otherwise see a
+    # misleading 200 on the redirect target).
+    login(client)
+    response = client.post(
+        "/save_draft",
+        data={"customer_id": "1", "items_json": "[]"},
+        headers={"X-CSRFToken": "not-a-real-token"},
+    )
+    assert response.status_code == 400
+    assert response.get_json() == {"error": "csrf_failed"}
+
+
 def test_login_locks_after_five_failed_attempts(client):
     for _ in range(5):
         login(client, password="wrong")

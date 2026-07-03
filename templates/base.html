@@ -211,7 +211,7 @@
         };
 
         const markNotificationRead = async (notificationId) => {
-            await fetch('/notifications/read', {
+            const response = await fetch('/notifications/read', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -219,6 +219,9 @@
                 },
                 body: JSON.stringify({ notification_id: notificationId }),
             });
+            if (!response.ok) {
+                return;
+            }
             seenNotifications.add(notificationId);
             persistSeenNotifications();
         };

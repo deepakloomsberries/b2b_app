@@ -134,8 +134,15 @@ def enforce_csrf():
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return None
     expected = session.get(CSRF_SESSION_KEY)
-    submitted = request.form.get("csrf_token") or request.headers.get("X-CSRFToken")
+    header_token = request.headers.get("X-CSRFToken")
+    submitted = request.form.get("csrf_token") or header_token
     if not expected or not submitted or not secrets.compare_digest(submitted, expected):
+        # fetch() follows redirects and lands on a 200, so a caller that
+        # authenticates via the header (JS) must get a real error status -
+        # otherwise `response.ok` looks like success for a request that
+        # never went through.
+        if header_token is not None:
+            return jsonify({"error": "csrf_failed"}), 400
         flash("Your session expired. Please try again.", "error")
         return redirect(request.referrer or url_for("home"))
     return None
