@@ -627,7 +627,15 @@ def login():
         password = request.form.get("password", "").strip()
         normalized_username = username.lower()
         with get_db() as conn:
-            locked_until = check_login_lockout(conn, normalized_username)
+            user = conn.execute(
+                "SELECT * FROM users WHERE LOWER(name) = ? OR LOWER(email) = ?",
+                (normalized_username, normalized_username),
+            ).fetchone()
+            # Key the lockout on the resolved account name (not the typed
+            # string) so alternating between a username and email for the
+            # same account shares one attempt counter instead of doubling it.
+            identifier = user["name"].lower() if user else normalized_username
+            locked_until = check_login_lockout(conn, identifier)
             if locked_until:
                 flash(
                     "Too many failed attempts. Try again after "
@@ -635,19 +643,15 @@ def login():
                     "error",
                 )
                 return render_template("login.html")
-            user = conn.execute(
-                "SELECT * FROM users WHERE LOWER(name) = ? OR LOWER(email) = ?",
-                (normalized_username, normalized_username),
-            ).fetchone()
             if user and verify_password(conn, user, password):
-                clear_login_attempts(conn, normalized_username)
+                clear_login_attempts(conn, identifier)
                 session["user"] = {
                     "name": user["name"],
                     "role": normalize_user_role(user["role"]),
                 }
                 session.permanent = True
                 return redirect(url_for("home"))
-            register_failed_login(conn, normalized_username)
+            register_failed_login(conn, identifier)
         flash("Invalid credentials.", "error")
     return render_template("login.html")
 
