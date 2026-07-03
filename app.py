@@ -252,6 +252,19 @@ def sanitize_csv_cell(value):
     return text
 
 
+def get_credit_warning(customer):
+    """Return a warning dict if the customer's outstanding balance exceeds the
+    configured credit limit, or None if the limit is disabled (0) or not exceeded."""
+    credit_limit = parse_float(get_setting("credit_limit", "0"))
+    outstanding_balance = parse_float(customer["outstanding_balance"]) if customer else 0.0
+    if credit_limit <= 0 or outstanding_balance <= credit_limit:
+        return None
+    return {
+        "outstanding_balance": outstanding_balance,
+        "credit_limit": credit_limit,
+    }
+
+
 def format_datetime(value):
     if not value:
         return ""
@@ -768,7 +781,14 @@ def customers_list():
             "ORDER BY c.name",
             params,
         ).fetchall()
-    enriched_customers = [dict(row) for row in rows]
+    credit_limit = parse_float(get_setting("credit_limit", "0"))
+    enriched_customers = []
+    for row in rows:
+        customer = dict(row)
+        customer["over_credit_limit"] = (
+            credit_limit > 0 and parse_float(customer["outstanding_balance"]) > credit_limit
+        )
+        enriched_customers.append(customer)
     return render_template(
         "customers_list.html", customers=enriched_customers, query=query
     )
@@ -939,6 +959,7 @@ def catalog(customer_id):
     return render_template(
         "catalog.html",
         customer=customer,
+        credit_warning=get_credit_warning(customer),
         products=products,
         categories=categories,
         subcategories=subcategories,
@@ -1216,6 +1237,7 @@ def review_order():
     return render_template(
         "review_order.html",
         customer=customer,
+        credit_warning=get_credit_warning(customer),
         items=order_items,
         currency_symbol=get_setting("currency_symbol", "SAR"),
     )
@@ -2532,6 +2554,7 @@ def admin():
                 low_stock_threshold = max(0, int(request.form.get("low_stock_threshold", "5")))
             except ValueError:
                 low_stock_threshold = 5
+            credit_limit = max(0.0, parse_float(request.form.get("credit_limit", "0")))
             with get_db() as conn:
                 for key, val in [
                     ("reservation_mode", reservation_mode),
@@ -2539,6 +2562,7 @@ def admin():
                     ("show_stock_to_customers", show_stock),
                     ("currency_symbol", currency_symbol[:10]),
                     ("low_stock_threshold", str(low_stock_threshold)),
+                    ("credit_limit", str(credit_limit)),
                 ]:
                     conn.execute(
                         "INSERT INTO settings (key, value) VALUES (?, ?) "
@@ -2551,6 +2575,7 @@ def admin():
                     "show_stock_to_customers": show_stock,
                     "currency_symbol": currency_symbol,
                     "low_stock_threshold": low_stock_threshold,
+                    "credit_limit": credit_limit,
                 })
                 conn.commit()
             message = "Settings saved."
@@ -2710,6 +2735,7 @@ def admin():
         "show_stock_to_customers": get_setting("show_stock_to_customers", "on"),
         "currency_symbol": get_setting("currency_symbol", "SAR"),
         "low_stock_threshold": int(get_setting("low_stock_threshold", "5") or 5),
+        "credit_limit": parse_float(get_setting("credit_limit", "0")),
     }
     return render_template(
         "admin.html",

@@ -24,6 +24,9 @@
                     {% if customer.priority_flag %}
                         <span class="priority-badge {{ customer.priority_flag }}">★ {{ customer.priority_flag.replace('_', ' ') }}</span>
                     {% endif %}
+                    {% if customer.over_credit_limit %}
+                        <span class="priority-badge on_hold">⚠ Over credit limit</span>
+                    {% endif %}
                 </div>
                 <div class="buyer-summary">
                     <span>Last order: {{ customer.last_order_date|format_dt or "No orders yet" }}</span>

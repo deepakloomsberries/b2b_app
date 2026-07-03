@@ -3,6 +3,12 @@
 {% block body_class %}mobile-ui catalog-page force-mobile{% endblock %}
 
 {% block content %}
+{% if credit_warning %}
+    <div class="warning-banner">
+        ⚠ {{ customer.name }} has an outstanding balance of SAR {{ '%.2f'|format(credit_warning.outstanding_balance) }},
+        over the SAR {{ '%.2f'|format(credit_warning.credit_limit) }} credit limit.
+    </div>
+{% endif %}
 <header class="app-header with-back">
     <a class="back-button" href="{{ url_for('customers_list') }}" aria-label="Back">←</a>
     <h1>{{ customer.name }}</h1>

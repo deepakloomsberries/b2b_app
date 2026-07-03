@@ -814,6 +814,13 @@
                            value="{{ app_settings.currency_symbol }}">
                 </label>
 
+                <label>
+                    <strong>Credit Limit</strong>
+                    <span class="muted label-hint">Sales reps see a warning when reviewing or placing an order for a customer whose outstanding balance exceeds this amount. Set to 0 to disable.</span>
+                    <input type="number" name="credit_limit" min="0" step="0.01"
+                           value="{{ app_settings.credit_limit }}">
+                </label>
+
                 <button type="submit" class="button">Save Settings</button>
             </form>
         </div>
@@ -825,6 +832,7 @@
                 <li><strong>Show stock:</strong> {{ app_settings.show_stock_to_customers | upper }}</li>
                 <li><strong>Low stock threshold:</strong> {{ app_settings.low_stock_threshold }}</li>
                 <li><strong>Currency:</strong> {{ app_settings.currency_symbol }}</li>
+                <li><strong>Credit limit:</strong> {{ app_settings.currency_symbol }} {{ '%.2f'|format(app_settings.credit_limit) }}{% if app_settings.credit_limit == 0 %} (disabled){% endif %}</li>
             </ul>
         </div>
     </div>

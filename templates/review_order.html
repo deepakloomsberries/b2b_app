@@ -12,6 +12,13 @@
     <h1>Cart</h1>
 </header>
 
+{% if credit_warning %}
+    <div class="warning-banner">
+        ⚠ {{ customer.name }} has an outstanding balance of SAR {{ '%.2f'|format(credit_warning.outstanding_balance) }},
+        over the SAR {{ '%.2f'|format(credit_warning.credit_limit) }} credit limit.
+    </div>
+{% endif %}
+
 <p class="cart-note">All prices are exclusive of taxes.</p>
 
 <form method="post" action="{{ url_for('place_order') }}" id="review-form">

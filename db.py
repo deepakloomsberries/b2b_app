@@ -201,6 +201,7 @@ def init_db(db_path=None):
             ("show_stock_to_customers", "on"),
             ("low_stock_threshold", "5"),
             ("currency_symbol", "SAR"),
+            ("credit_limit", "0"),
         ]
         for key, value in default_settings:
             conn.execute(
