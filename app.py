@@ -1,5 +1,6 @@
 import csv
 import io
+import secrets
 import sqlite3
 import json
 import os
@@ -114,6 +115,39 @@ def require_login():
     return None
 
 
+CSRF_SESSION_KEY = "_csrf_token"
+
+
+def get_csrf_token():
+    token = session.get(CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session[CSRF_SESSION_KEY] = token
+    return token
+
+
+app.jinja_env.globals["csrf_token"] = get_csrf_token
+
+
+@app.before_request
+def enforce_csrf():
+    if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
+        return None
+    expected = session.get(CSRF_SESSION_KEY)
+    header_token = request.headers.get("X-CSRFToken")
+    submitted = request.form.get("csrf_token") or header_token
+    if not expected or not submitted or not secrets.compare_digest(submitted, expected):
+        # fetch() follows redirects and lands on a 200, so a caller that
+        # authenticates via the header (JS) must get a real error status -
+        # otherwise `response.ok` looks like success for a request that
+        # never went through.
+        if header_token is not None:
+            return jsonify({"error": "csrf_failed"}), 400
+        flash("Your session expired. Please try again.", "error")
+        return redirect(request.referrer or url_for("home"))
+    return None
+
+
 def require_admin():
     user = session.get("user")
     if not user or normalize_user_role(user.get("role")) != "admin":
@@ -164,6 +198,78 @@ def parse_int(value):
 def normalize_user_role(role):
     normalized = str(role or "user").strip().lower()
     return normalized if normalized in {"user", "warehouse", "admin"} else "user"
+
+
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_LOCKOUT_MINUTES = 15
+
+
+def check_login_lockout(conn, identifier):
+    row = conn.execute(
+        "SELECT locked_until FROM login_attempts WHERE identifier = ?", (identifier,)
+    ).fetchone()
+    if not row or not row["locked_until"]:
+        return None
+    locked_until = parse_iso_date(row["locked_until"])
+    if locked_until and locked_until > datetime.utcnow():
+        return locked_until
+    return None
+
+
+def register_failed_login(conn, identifier):
+    row = conn.execute(
+        "SELECT fail_count FROM login_attempts WHERE identifier = ?", (identifier,)
+    ).fetchone()
+    fail_count = (row["fail_count"] if row else 0) + 1
+    locked_until = None
+    if fail_count >= LOGIN_MAX_ATTEMPTS:
+        locked_until = (
+            datetime.utcnow() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+        ).isoformat()
+        fail_count = 0
+    conn.execute(
+        "INSERT INTO login_attempts (identifier, fail_count, locked_until, last_attempt_at) "
+        "VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(identifier) DO UPDATE SET fail_count = excluded.fail_count, "
+        "locked_until = excluded.locked_until, last_attempt_at = excluded.last_attempt_at",
+        (identifier, fail_count, locked_until, now_iso()),
+    )
+    conn.commit()
+
+
+def clear_login_attempts(conn, identifier):
+    conn.execute("DELETE FROM login_attempts WHERE identifier = ?", (identifier,))
+    conn.commit()
+
+
+def require_warehouse():
+    user = session.get("user")
+    if not user or normalize_user_role(user.get("role")) not in {"warehouse", "admin"}:
+        flash("Warehouse or admin access required.", "error")
+        return redirect(url_for("orders_list"))
+    return None
+
+
+def sanitize_csv_cell(value):
+    """Prefix a leading apostrophe on values that could be read as spreadsheet
+    formulas (=, +, -, @) so downloaded/exported CSVs open safely in Excel/Sheets."""
+    text = "" if value is None else str(value)
+    if text[:1] in ("=", "+", "-", "@"):
+        return "'" + text
+    return text
+
+
+def get_credit_warning(customer):
+    """Return a warning dict if the customer's outstanding balance exceeds the
+    configured credit limit, or None if the limit is disabled (0) or not exceeded."""
+    credit_limit = parse_float(get_setting("credit_limit", "0"))
+    outstanding_balance = parse_float(customer["outstanding_balance"]) if customer else 0.0
+    if credit_limit <= 0 or outstanding_balance <= credit_limit:
+        return None
+    return {
+        "outstanding_balance": outstanding_balance,
+        "credit_limit": credit_limit,
+    }
 
 
 def format_datetime(value):
@@ -572,13 +678,27 @@ def login():
                 "SELECT * FROM users WHERE LOWER(name) = ? OR LOWER(email) = ?",
                 (normalized_username, normalized_username),
             ).fetchone()
+            # Key the lockout on the resolved account name (not the typed
+            # string) so alternating between a username and email for the
+            # same account shares one attempt counter instead of doubling it.
+            identifier = user["name"].lower() if user else normalized_username
+            locked_until = check_login_lockout(conn, identifier)
+            if locked_until:
+                flash(
+                    "Too many failed attempts. Try again after "
+                    f"{locked_until.strftime('%H:%M UTC')}.",
+                    "error",
+                )
+                return render_template("login.html")
             if user and verify_password(conn, user, password):
+                clear_login_attempts(conn, identifier)
                 session["user"] = {
                     "name": user["name"],
                     "role": normalize_user_role(user["role"]),
                 }
                 session.permanent = True
                 return redirect(url_for("home"))
+            register_failed_login(conn, identifier)
         flash("Invalid credentials.", "error")
     return render_template("login.html")
 
@@ -648,38 +768,34 @@ def mark_notification_read():
 @app.route("/customers")
 def customers_list():
     query = request.args.get("q", "").strip()
+    where_clause = "WHERE c.name LIKE ?" if query else ""
+    params = (f"%{query}%",) if query else ()
     with get_db() as conn:
-        if query:
-            customers = conn.execute(
-                "SELECT * FROM customers WHERE name LIKE ? ORDER BY name",
-                (f"%{query}%",),
-            ).fetchall()
-        else:
-            customers = conn.execute("SELECT * FROM customers ORDER BY name").fetchall()
-        enriched_customers = []
-        for customer in customers:
-            last_order = conn.execute(
-                "SELECT id, created_at FROM orders WHERE customer_id = ? "
-                "ORDER BY created_at DESC LIMIT 1",
-                (customer["id"],),
-            ).fetchone()
-            last_order_total = 0
-            if last_order:
-                last_order_total = (
-                    conn.execute(
-                        "SELECT COALESCE(SUM(qty * price_snapshot), 0) AS total "
-                        "FROM order_items WHERE order_id = ?",
-                        (last_order["id"],),
-                    ).fetchone()["total"]
-                    or 0
-                )
-            enriched_customers.append(
-                {
-                    **dict(customer),
-                    "last_order_date": last_order["created_at"] if last_order else None,
-                    "last_order_total": last_order_total,
-                }
-            )
+        rows = conn.execute(
+            "SELECT c.*, lo.created_at AS last_order_date, "
+            "COALESCE(t.total, 0) AS last_order_total "
+            "FROM customers c "
+            "LEFT JOIN ("
+            "  SELECT customer_id, id, created_at, "
+            "         ROW_NUMBER() OVER (PARTITION BY customer_id ORDER BY created_at DESC) AS rn "
+            "  FROM orders"
+            ") lo ON lo.customer_id = c.id AND lo.rn = 1 "
+            "LEFT JOIN ("
+            "  SELECT order_id, SUM(qty * price_snapshot) AS total "
+            "  FROM order_items GROUP BY order_id"
+            ") t ON t.order_id = lo.id "
+            f"{where_clause} "
+            "ORDER BY c.name",
+            params,
+        ).fetchall()
+    credit_limit = parse_float(get_setting("credit_limit", "0"))
+    enriched_customers = []
+    for row in rows:
+        customer = dict(row)
+        customer["over_credit_limit"] = (
+            credit_limit > 0 and parse_float(customer["outstanding_balance"]) > credit_limit
+        )
+        enriched_customers.append(customer)
     return render_template(
         "customers_list.html", customers=enriched_customers, query=query
     )
@@ -850,6 +966,7 @@ def catalog(customer_id):
     return render_template(
         "catalog.html",
         customer=customer,
+        credit_warning=get_credit_warning(customer),
         products=products,
         categories=categories,
         subcategories=subcategories,
@@ -1012,6 +1129,16 @@ def place_order():
             )
             order_rows.append({"sku": sku, "qty": qty, "price": price_base})
         adjust_reserved_stock(conn, order_id, 1)
+        log_audit(
+            conn,
+            "order_placed",
+            "orders",
+            {
+                "order_number": order_number,
+                "customer_id": customer_id,
+                "item_count": len(order_rows),
+            },
+        )
         notification_title = f"New order {order_number}"
         notification_message = (
             f"{customer['name']} submitted an order with {len(order_rows)} items."
@@ -1117,6 +1244,7 @@ def review_order():
     return render_template(
         "review_order.html",
         customer=customer,
+        credit_warning=get_credit_warning(customer),
         items=order_items,
         currency_symbol=get_setting("currency_symbol", "SAR"),
     )
@@ -1435,25 +1563,24 @@ def download_order(order_number):
             (order_number,),
         ).fetchall()
 
-    rows = [
-        ["Order Number", order["order_number"]],
-        ["Customer", order["customer_name"]],
-        ["Created At", order["created_at"]],
-        [],
-        ["SKU", "Title", "Qty", "Price"],
-    ]
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Order Number", sanitize_csv_cell(order["order_number"])])
+    writer.writerow(["Customer", sanitize_csv_cell(order["customer_name"])])
+    writer.writerow(["Created At", order["created_at"]])
+    writer.writerow([])
+    writer.writerow(["SKU", "Title", "Qty", "Price"])
     for item in items:
-        rows.append(
+        writer.writerow(
             [
-                item["sku"],
-                item["title_snapshot"],
-                str(item["qty"]),
+                sanitize_csv_cell(item["sku"]),
+                sanitize_csv_cell(item["title_snapshot"]),
+                item["qty"],
                 f"{item['price_snapshot']:.2f}",
             ]
         )
-    output = "\n".join([",".join(row) for row in rows])
     return Response(
-        output,
+        output.getvalue(),
         mimetype="text/csv",
         headers={
             "Content-Disposition": f"attachment; filename={order_number}.csv"
@@ -1685,21 +1812,22 @@ def export_orders(order_numbers, as_pdf=False):
             headers={"Content-Disposition": "attachment; filename=orders.pdf"},
         )
 
-    rows = [["Order Number", "Created At", "SKU", "Title", "Qty", "Price"]]
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Order Number", "Created At", "SKU", "Title", "Qty", "Price"])
     for item in items:
-        rows.append(
+        writer.writerow(
             [
-                order_map.get(item["order_id"], {}).get("number", ""),
+                sanitize_csv_cell(order_map.get(item["order_id"], {}).get("number", "")),
                 order_map.get(item["order_id"], {}).get("created_at", ""),
-                item["sku"],
-                item["title_snapshot"],
-                str(item["qty"]),
+                sanitize_csv_cell(item["sku"]),
+                sanitize_csv_cell(item["title_snapshot"]),
+                item["qty"],
                 f"{item['price_snapshot']:.2f}",
             ]
         )
-    output = "\n".join([",".join(row) for row in rows])
     return Response(
-        output,
+        output.getvalue(),
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=orders.csv"},
     )
@@ -1707,6 +1835,9 @@ def export_orders(order_numbers, as_pdf=False):
 
 @app.route("/orders/<order_number>/status", methods=["POST"])
 def update_order_status(order_number):
+    warehouse_guard = require_warehouse()
+    if warehouse_guard:
+        return warehouse_guard
     new_status = request.form.get("order_status", "").strip()
     view_filter = get_orders_view_param()
     allowed = {"submitted", "accepted", "packed", "shipped", "delivered", "cancelled"}
@@ -1731,6 +1862,16 @@ def update_order_status(order_number):
         )
         if was_reserved != will_reserve:
             adjust_reserved_stock(conn, order["id"], 1 if will_reserve else -1)
+        log_audit(
+            conn,
+            "order_status_update",
+            "orders",
+            {
+                "order_number": order_number,
+                "from_status": order["order_status"],
+                "to_status": new_status,
+            },
+        )
         conn.commit()
     flash(f"Order {order_number} updated.", "success")
     return redirect(url_for("orders_list", view=view_filter))
@@ -1738,12 +1879,21 @@ def update_order_status(order_number):
 
 @app.route("/orders/<order_number>/assign", methods=["POST"])
 def assign_order(order_number):
+    warehouse_guard = require_warehouse()
+    if warehouse_guard:
+        return warehouse_guard
     assignee_id = request.form.get("assigned_user_id")
     view_filter = get_orders_view_param()
     with get_db() as conn:
         conn.execute(
             "UPDATE orders SET assigned_user_id = ? WHERE order_number = ?",
             (assignee_id or None, order_number),
+        )
+        log_audit(
+            conn,
+            "order_assign",
+            "orders",
+            {"order_number": order_number, "assigned_user_id": assignee_id or None},
         )
         conn.commit()
     flash(f"Order {order_number} assigned.", "success")
@@ -1784,6 +1934,9 @@ def order_items(order_number):
 
 @app.route("/orders/bulk_action", methods=["POST"])
 def orders_bulk_action():
+    warehouse_guard = require_warehouse()
+    if warehouse_guard:
+        return warehouse_guard
     action = request.form.get("bulk_action")
     order_numbers = request.form.get("order_numbers", "")
     order_list = [num for num in order_numbers.split(",") if num]
@@ -1812,6 +1965,12 @@ def orders_bulk_action():
             conn.execute(
                 f"UPDATE orders SET order_status = ? WHERE order_number IN ({','.join('?' for _ in order_list)})",
                 (new_status, *order_list),
+            )
+            log_audit(
+                conn,
+                "order_bulk_status_update",
+                "orders",
+                {"order_numbers": order_list, "to_status": new_status},
             )
             conn.commit()
         flash("Orders updated.", "success")
@@ -2402,6 +2561,7 @@ def admin():
                 low_stock_threshold = max(0, int(request.form.get("low_stock_threshold", "5")))
             except ValueError:
                 low_stock_threshold = 5
+            credit_limit = max(0.0, parse_float(request.form.get("credit_limit", "0")))
             with get_db() as conn:
                 for key, val in [
                     ("reservation_mode", reservation_mode),
@@ -2409,6 +2569,7 @@ def admin():
                     ("show_stock_to_customers", show_stock),
                     ("currency_symbol", currency_symbol[:10]),
                     ("low_stock_threshold", str(low_stock_threshold)),
+                    ("credit_limit", str(credit_limit)),
                 ]:
                     conn.execute(
                         "INSERT INTO settings (key, value) VALUES (?, ?) "
@@ -2421,6 +2582,7 @@ def admin():
                     "show_stock_to_customers": show_stock,
                     "currency_symbol": currency_symbol,
                     "low_stock_threshold": low_stock_threshold,
+                    "credit_limit": credit_limit,
                 })
                 conn.commit()
             message = "Settings saved."
@@ -2580,6 +2742,7 @@ def admin():
         "show_stock_to_customers": get_setting("show_stock_to_customers", "on"),
         "currency_symbol": get_setting("currency_symbol", "SAR"),
         "low_stock_threshold": int(get_setting("low_stock_threshold", "5") or 5),
+        "credit_limit": parse_float(get_setting("credit_limit", "0")),
     }
     return render_template(
         "admin.html",

@@ -5,6 +5,7 @@
     <h1>Login</h1>
     <p>Use admin/admin to sign in the first time.</p>
     <form method="post" class="form-card">
+        {% include "_csrf_field.html" %}
         <label>
             Username or Email
             <input type="text" name="username" required>

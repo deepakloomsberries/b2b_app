@@ -29,6 +29,7 @@
                     <div class="action-row">
                         <a class="button small" href="{{ url_for('catalog', customer_id=draft.customer_id, draft_id=draft.id) }}">Resume</a>
                         <form method="post" action="{{ url_for('delete_draft', draft_id=draft.id) }}">
+                            {% include "_csrf_field.html" %}
                             <button type="submit" class="button small danger">Clear</button>
                         </form>
                     </div>

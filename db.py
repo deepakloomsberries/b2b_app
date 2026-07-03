@@ -157,6 +157,12 @@ def init_db(db_path=None):
         UNIQUE(notification_id, reader_name),
         FOREIGN KEY(notification_id) REFERENCES notifications(id)
     );
+    CREATE TABLE IF NOT EXISTS login_attempts (
+        identifier TEXT PRIMARY KEY,
+        fail_count INTEGER NOT NULL DEFAULT 0,
+        locked_until TEXT,
+        last_attempt_at TEXT
+    );
     """
     with get_db(db_path) as conn:
         conn.executescript(schema)
@@ -195,6 +201,7 @@ def init_db(db_path=None):
             ("show_stock_to_customers", "on"),
             ("low_stock_threshold", "5"),
             ("currency_symbol", "SAR"),
+            ("credit_limit", "0"),
         ]
         for key, value in default_settings:
             conn.execute(

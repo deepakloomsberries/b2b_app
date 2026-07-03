@@ -24,6 +24,9 @@
                     {% if customer.priority_flag %}
                         <span class="priority-badge {{ customer.priority_flag }}">★ {{ customer.priority_flag.replace('_', ' ') }}</span>
                     {% endif %}
+                    {% if customer.over_credit_limit %}
+                        <span class="priority-badge on_hold">⚠ Over credit limit</span>
+                    {% endif %}
                 </div>
                 <div class="buyer-summary">
                     <span>Last order: {{ customer.last_order_date|format_dt or "No orders yet" }}</span>
@@ -39,6 +42,7 @@
                             <span>Last order value: SAR {{ '%.2f'|format(customer.last_order_total or 0) }}</span>
                         </div>
                         <form method="post" action="{{ url_for('update_customer_priority', customer_id=customer.id) }}" class="buyer-priority-form">
+                            {% include "_csrf_field.html" %}
                             <label>
                                 Priority
                                 <select name="priority_flag">
@@ -55,6 +59,7 @@
                             <button type="submit" class="outline-button">Update Summary</button>
                         </form>
                         <form method="post" action="{{ url_for('customer_visit', customer_id=customer.id) }}">
+                            {% include "_csrf_field.html" %}
                             <button type="submit" class="outline-button">Mark Visited</button>
                         </form>
                     </details>
