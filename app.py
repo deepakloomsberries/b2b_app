@@ -1101,6 +1101,16 @@ def place_order():
             )
             order_rows.append({"sku": sku, "qty": qty, "price": price_base})
         adjust_reserved_stock(conn, order_id, 1)
+        log_audit(
+            conn,
+            "order_placed",
+            "orders",
+            {
+                "order_number": order_number,
+                "customer_id": customer_id,
+                "item_count": len(order_rows),
+            },
+        )
         notification_title = f"New order {order_number}"
         notification_message = (
             f"{customer['name']} submitted an order with {len(order_rows)} items."
@@ -1823,6 +1833,16 @@ def update_order_status(order_number):
         )
         if was_reserved != will_reserve:
             adjust_reserved_stock(conn, order["id"], 1 if will_reserve else -1)
+        log_audit(
+            conn,
+            "order_status_update",
+            "orders",
+            {
+                "order_number": order_number,
+                "from_status": order["order_status"],
+                "to_status": new_status,
+            },
+        )
         conn.commit()
     flash(f"Order {order_number} updated.", "success")
     return redirect(url_for("orders_list", view=view_filter))
@@ -1839,6 +1859,12 @@ def assign_order(order_number):
         conn.execute(
             "UPDATE orders SET assigned_user_id = ? WHERE order_number = ?",
             (assignee_id or None, order_number),
+        )
+        log_audit(
+            conn,
+            "order_assign",
+            "orders",
+            {"order_number": order_number, "assigned_user_id": assignee_id or None},
         )
         conn.commit()
     flash(f"Order {order_number} assigned.", "success")
@@ -1910,6 +1936,12 @@ def orders_bulk_action():
             conn.execute(
                 f"UPDATE orders SET order_status = ? WHERE order_number IN ({','.join('?' for _ in order_list)})",
                 (new_status, *order_list),
+            )
+            log_audit(
+                conn,
+                "order_bulk_status_update",
+                "orders",
+                {"order_numbers": order_list, "to_status": new_status},
             )
             conn.commit()
         flash("Orders updated.", "success")
