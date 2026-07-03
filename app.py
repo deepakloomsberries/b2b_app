@@ -166,6 +166,65 @@ def normalize_user_role(role):
     return normalized if normalized in {"user", "warehouse", "admin"} else "user"
 
 
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_LOCKOUT_MINUTES = 15
+
+
+def check_login_lockout(conn, identifier):
+    row = conn.execute(
+        "SELECT locked_until FROM login_attempts WHERE identifier = ?", (identifier,)
+    ).fetchone()
+    if not row or not row["locked_until"]:
+        return None
+    locked_until = parse_iso_date(row["locked_until"])
+    if locked_until and locked_until > datetime.utcnow():
+        return locked_until
+    return None
+
+
+def register_failed_login(conn, identifier):
+    row = conn.execute(
+        "SELECT fail_count FROM login_attempts WHERE identifier = ?", (identifier,)
+    ).fetchone()
+    fail_count = (row["fail_count"] if row else 0) + 1
+    locked_until = None
+    if fail_count >= LOGIN_MAX_ATTEMPTS:
+        locked_until = (
+            datetime.utcnow() + timedelta(minutes=LOGIN_LOCKOUT_MINUTES)
+        ).isoformat()
+        fail_count = 0
+    conn.execute(
+        "INSERT INTO login_attempts (identifier, fail_count, locked_until, last_attempt_at) "
+        "VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(identifier) DO UPDATE SET fail_count = excluded.fail_count, "
+        "locked_until = excluded.locked_until, last_attempt_at = excluded.last_attempt_at",
+        (identifier, fail_count, locked_until, now_iso()),
+    )
+    conn.commit()
+
+
+def clear_login_attempts(conn, identifier):
+    conn.execute("DELETE FROM login_attempts WHERE identifier = ?", (identifier,))
+    conn.commit()
+
+
+def require_warehouse():
+    user = session.get("user")
+    if not user or normalize_user_role(user.get("role")) not in {"warehouse", "admin"}:
+        flash("Warehouse or admin access required.", "error")
+        return redirect(url_for("orders_list"))
+    return None
+
+
+def sanitize_csv_cell(value):
+    """Prefix a leading apostrophe on values that could be read as spreadsheet
+    formulas (=, +, -, @) so downloaded/exported CSVs open safely in Excel/Sheets."""
+    text = "" if value is None else str(value)
+    if text[:1] in ("=", "+", "-", "@"):
+        return "'" + text
+    return text
+
+
 def format_datetime(value):
     if not value:
         return ""
@@ -568,17 +627,27 @@ def login():
         password = request.form.get("password", "").strip()
         normalized_username = username.lower()
         with get_db() as conn:
+            locked_until = check_login_lockout(conn, normalized_username)
+            if locked_until:
+                flash(
+                    "Too many failed attempts. Try again after "
+                    f"{locked_until.strftime('%H:%M UTC')}.",
+                    "error",
+                )
+                return render_template("login.html")
             user = conn.execute(
                 "SELECT * FROM users WHERE LOWER(name) = ? OR LOWER(email) = ?",
                 (normalized_username, normalized_username),
             ).fetchone()
             if user and verify_password(conn, user, password):
+                clear_login_attempts(conn, normalized_username)
                 session["user"] = {
                     "name": user["name"],
                     "role": normalize_user_role(user["role"]),
                 }
                 session.permanent = True
                 return redirect(url_for("home"))
+            register_failed_login(conn, normalized_username)
         flash("Invalid credentials.", "error")
     return render_template("login.html")
 
@@ -1435,25 +1504,24 @@ def download_order(order_number):
             (order_number,),
         ).fetchall()
 
-    rows = [
-        ["Order Number", order["order_number"]],
-        ["Customer", order["customer_name"]],
-        ["Created At", order["created_at"]],
-        [],
-        ["SKU", "Title", "Qty", "Price"],
-    ]
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Order Number", sanitize_csv_cell(order["order_number"])])
+    writer.writerow(["Customer", sanitize_csv_cell(order["customer_name"])])
+    writer.writerow(["Created At", order["created_at"]])
+    writer.writerow([])
+    writer.writerow(["SKU", "Title", "Qty", "Price"])
     for item in items:
-        rows.append(
+        writer.writerow(
             [
-                item["sku"],
-                item["title_snapshot"],
-                str(item["qty"]),
+                sanitize_csv_cell(item["sku"]),
+                sanitize_csv_cell(item["title_snapshot"]),
+                item["qty"],
                 f"{item['price_snapshot']:.2f}",
             ]
         )
-    output = "\n".join([",".join(row) for row in rows])
     return Response(
-        output,
+        output.getvalue(),
         mimetype="text/csv",
         headers={
             "Content-Disposition": f"attachment; filename={order_number}.csv"
@@ -1685,21 +1753,22 @@ def export_orders(order_numbers, as_pdf=False):
             headers={"Content-Disposition": "attachment; filename=orders.pdf"},
         )
 
-    rows = [["Order Number", "Created At", "SKU", "Title", "Qty", "Price"]]
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(["Order Number", "Created At", "SKU", "Title", "Qty", "Price"])
     for item in items:
-        rows.append(
+        writer.writerow(
             [
-                order_map.get(item["order_id"], {}).get("number", ""),
+                sanitize_csv_cell(order_map.get(item["order_id"], {}).get("number", "")),
                 order_map.get(item["order_id"], {}).get("created_at", ""),
-                item["sku"],
-                item["title_snapshot"],
-                str(item["qty"]),
+                sanitize_csv_cell(item["sku"]),
+                sanitize_csv_cell(item["title_snapshot"]),
+                item["qty"],
                 f"{item['price_snapshot']:.2f}",
             ]
         )
-    output = "\n".join([",".join(row) for row in rows])
     return Response(
-        output,
+        output.getvalue(),
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=orders.csv"},
     )
@@ -1707,6 +1776,9 @@ def export_orders(order_numbers, as_pdf=False):
 
 @app.route("/orders/<order_number>/status", methods=["POST"])
 def update_order_status(order_number):
+    warehouse_guard = require_warehouse()
+    if warehouse_guard:
+        return warehouse_guard
     new_status = request.form.get("order_status", "").strip()
     view_filter = get_orders_view_param()
     allowed = {"submitted", "accepted", "packed", "shipped", "delivered", "cancelled"}
@@ -1738,6 +1810,9 @@ def update_order_status(order_number):
 
 @app.route("/orders/<order_number>/assign", methods=["POST"])
 def assign_order(order_number):
+    warehouse_guard = require_warehouse()
+    if warehouse_guard:
+        return warehouse_guard
     assignee_id = request.form.get("assigned_user_id")
     view_filter = get_orders_view_param()
     with get_db() as conn:
@@ -1784,6 +1859,9 @@ def order_items(order_number):
 
 @app.route("/orders/bulk_action", methods=["POST"])
 def orders_bulk_action():
+    warehouse_guard = require_warehouse()
+    if warehouse_guard:
+        return warehouse_guard
     action = request.form.get("bulk_action")
     order_numbers = request.form.get("order_numbers", "")
     order_list = [num for num in order_numbers.split(",") if num]

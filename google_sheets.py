@@ -7,6 +7,15 @@ from gspread.exceptions import WorksheetNotFound
 from db import get_db, now_iso
 
 
+def _sheet_safe(value):
+    """Prefix values that could be read as spreadsheet formulas (=, +, -, @) so
+    exported rows can't execute formulas when opened with USER_ENTERED input."""
+    text = "" if value is None else str(value)
+    if text[:1] in ("=", "+", "-", "@"):
+        return "'" + text
+    return text
+
+
 def get_gspread_client():
     creds_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     if not creds_path or not os.path.exists(creds_path):
@@ -93,13 +102,13 @@ def export_order_rows(order_number, customer_name, rows, remarks=""):
     for row in rows:
         payload.append(
             [
-                order_number,
+                _sheet_safe(order_number),
                 timestamp,
-                customer_name,
-                row["sku"],
+                _sheet_safe(customer_name),
+                _sheet_safe(row["sku"]),
                 row["qty"],
                 row["price"],
-                remarks,
+                _sheet_safe(remarks),
             ]
         )
     if payload:
