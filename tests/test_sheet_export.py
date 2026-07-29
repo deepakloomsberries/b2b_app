@@ -1,7 +1,45 @@
 import json
 
+import requests
+from requests.adapters import HTTPAdapter
+
 import google_sheets
 from conftest import login, post_with_csrf
+
+
+def test_timeout_adapter_injects_default_timeout(monkeypatch):
+    """A request with no explicit timeout gets the adapter's default, so a
+    stalled connection can never hang forever."""
+    captured = {}
+
+    def fake_send(self, request, **kwargs):
+        captured.update(kwargs)
+        return "sent"
+
+    monkeypatch.setattr(HTTPAdapter, "send", fake_send)
+    adapter = google_sheets._TimeoutHTTPAdapter(timeout=(10, 30))
+    assert adapter.send(request=object()) == "sent"
+    assert captured["timeout"] == (10, 30)
+
+
+def test_timeout_adapter_respects_explicit_timeout(monkeypatch):
+    captured = {}
+    monkeypatch.setattr(HTTPAdapter, "send", lambda self, request, **kw: captured.update(kw))
+    adapter = google_sheets._TimeoutHTTPAdapter(timeout=(10, 30))
+    adapter.send(request=object(), timeout=5)
+    assert captured["timeout"] == 5
+
+
+def test_apply_timeout_mounts_adapter_on_session():
+    class FakeClient:
+        def __init__(self):
+            self.http_client = type("H", (), {"session": requests.Session()})()
+
+    client = FakeClient()
+    google_sheets._apply_timeout(client, (10, 30))
+    adapter = client.http_client.session.get_adapter("https://example.com")
+    assert isinstance(adapter, google_sheets._TimeoutHTTPAdapter)
+    assert adapter._timeout == (10, 30)
 
 
 def _seed_customer_and_product(db, stock_qty=10):
