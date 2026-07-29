@@ -3,8 +3,44 @@ from datetime import datetime
 
 import gspread
 from gspread.exceptions import WorksheetNotFound
+from requests.adapters import HTTPAdapter
 
 from db import get_db, now_iso
+
+# Default (connect, read) timeouts in seconds for all Google API calls. gspread
+# and requests set no timeout by default, so a stalled network path (for
+# example a black-holed IPv6 route) blocks forever instead of failing. These
+# bound the wait so a failure is reported quickly and can be retried.
+DEFAULT_CONNECT_TIMEOUT = 10
+DEFAULT_READ_TIMEOUT = 30
+
+
+class _TimeoutHTTPAdapter(HTTPAdapter):
+    """A requests adapter that applies a default timeout to any request that
+    doesn't specify one, so no Google API call can hang indefinitely."""
+
+    def __init__(self, *args, timeout=None, **kwargs):
+        self._timeout = timeout
+        super().__init__(*args, **kwargs)
+
+    def send(self, request, **kwargs):
+        if kwargs.get("timeout") is None:
+            kwargs["timeout"] = self._timeout
+        return super().send(request, **kwargs)
+
+
+def _apply_timeout(client, timeout):
+    """Mount the timeout adapter on the client's underlying requests session.
+    Works across gspread versions (Client.session in 5.x, Client.http_client.
+    session in 6.x); a no-op if no session is found."""
+    session = getattr(client, "session", None) or getattr(
+        getattr(client, "http_client", None), "session", None
+    )
+    if session is not None:
+        adapter = _TimeoutHTTPAdapter(timeout=timeout)
+        session.mount("https://", adapter)
+        session.mount("http://", adapter)
+    return client
 
 
 def _sheet_safe(value):
@@ -20,7 +56,10 @@ def get_gspread_client():
     creds_path = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
     if not creds_path or not os.path.exists(creds_path):
         return None
-    return gspread.service_account(filename=creds_path)
+    client = gspread.service_account(filename=creds_path)
+    connect_timeout = float(os.getenv("SHEETS_CONNECT_TIMEOUT", DEFAULT_CONNECT_TIMEOUT))
+    read_timeout = float(os.getenv("SHEETS_READ_TIMEOUT", DEFAULT_READ_TIMEOUT))
+    return _apply_timeout(client, (connect_timeout, read_timeout))
 
 
 def sync_stock_from_sheet():
