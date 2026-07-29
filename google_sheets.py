@@ -96,7 +96,6 @@ def export_order_rows(order_number, customer_name, rows, remarks=""):
     if not sheet_id:
         return False, "Missing ORDERS_SHEET_ID."
 
-    worksheet = get_orders_worksheet(client, sheet_id)
     payload = []
     timestamp = datetime.utcnow().isoformat()
     for row in rows:
@@ -111,21 +110,40 @@ def export_order_rows(order_number, customer_name, rows, remarks=""):
                 _sheet_safe(remarks),
             ]
         )
-    if payload:
-        worksheet.append_rows(payload, value_input_option="USER_ENTERED")
+
+    # Any Google Sheets API / network failure (rate limits, permission errors,
+    # timeouts, transient 5xx, worksheet races) raises here. Convert it into a
+    # clean (False, message) result so the caller can mark the order as
+    # export_failed and a later retry can pick it up, instead of the exception
+    # propagating and leaving the order stuck in an inconsistent state.
+    try:
+        worksheet = get_orders_worksheet(client, sheet_id)
+        if payload:
+            worksheet.append_rows(payload, value_input_option="USER_ENTERED")
+    except Exception as exc:  # noqa: BLE001 - report any failure to the caller
+        return False, f"Google Sheets export failed: {exc}"
     return True, "Exported."
 
 
 def retry_failed_exports():
     with get_db() as conn:
+        # Retry anything that is not confirmed exported. This includes orders
+        # left in 'pending' (export never completed, e.g. the process crashed or
+        # the API call raised before status could be updated) as well as
+        # 'export_failed'. Restricting to 'export_failed' alone would silently
+        # skip orders stuck mid-export, which is why a retry could report
+        # success without ever re-sending the affected order.
         orders = conn.execute(
             "SELECT o.id, o.order_number, o.remarks, c.name as customer_name "
             "FROM orders o JOIN customers c ON o.customer_id = c.id "
-            "WHERE o.export_status = 'export_failed'"
+            "WHERE o.export_status != 'exported' "
+            "ORDER BY o.id"
         ).fetchall()
         if not orders:
-            return True, "No failed exports to retry."
+            return True, "No pending or failed exports to retry."
 
+        succeeded = 0
+        failures = []
         for order in orders:
             items = conn.execute(
                 "SELECT sku, qty, price_snapshot as price FROM order_items WHERE order_id = ?",
@@ -143,7 +161,19 @@ def retry_failed_exports():
                     "UPDATE orders SET export_status = 'exported' WHERE id = ?",
                     (order["id"],),
                 )
-                conn.commit()
+                succeeded += 1
             else:
-                return False, message
-    return True, "Retry complete."
+                # Keep the order flagged so it stays visible for the next retry,
+                # and continue with the remaining orders instead of aborting the
+                # whole batch on the first failure.
+                conn.execute(
+                    "UPDATE orders SET export_status = 'export_failed' WHERE id = ?",
+                    (order["id"],),
+                )
+                failures.append(f"{order['order_number']}: {message}")
+            conn.commit()
+
+    if failures:
+        detail = "; ".join(failures)
+        return False, f"Exported {succeeded} order(s); {len(failures)} still failing: {detail}"
+    return True, f"Retry complete. Exported {succeeded} order(s)."

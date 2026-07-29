@@ -1098,7 +1098,13 @@ def place_order():
 
         order_number = generate_order_number(conn)
         created_at = now_iso()
-        export_status = "exported"
+        # Start as 'pending'. The status is only promoted to 'exported' after
+        # the Google Sheets export actually succeeds below. Marking it
+        # 'exported' up front is unsafe: if the export call fails or the process
+        # dies before we can update the row, the order would be permanently
+        # (and wrongly) recorded as exported, and the retry sweep would never
+        # pick it up.
+        export_status = "pending"
         order_status = "submitted"
         conn.execute(
             "INSERT INTO orders (order_number, customer_id, created_at, export_status, order_status, submitted_by, remarks) "
@@ -1158,24 +1164,30 @@ def place_order():
     export_warning = None
     if order_rows:
         export_fn = getattr(google_sheets, "export_order_rows", None)
-        if export_fn:
-            success, message = export_fn(
-                order_number,
-                customer["name"],
-                order_rows,
-                remarks=order_remarks,
-            )
-        else:
+        try:
+            if export_fn:
+                success, message = export_fn(
+                    order_number,
+                    customer["name"],
+                    order_rows,
+                    remarks=order_remarks,
+                )
+            else:
+                success = False
+                message = "Export function unavailable."
+        except Exception as exc:  # noqa: BLE001 - never fail the order on export
             success = False
-            message = "Export function unavailable."
+            message = f"Google Sheets export failed: {exc}"
+
+        final_status = "exported" if success else "export_failed"
         if not success:
             export_warning = message
-            with get_db() as conn:
-                conn.execute(
-                    "UPDATE orders SET export_status = 'export_failed' WHERE order_number = ?",
-                    (order_number,),
-                )
-                conn.commit()
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE orders SET export_status = ? WHERE order_number = ?",
+                (final_status, order_number),
+            )
+            conn.commit()
 
     return render_template(
         "order_success.html",
