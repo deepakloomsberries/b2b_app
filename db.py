@@ -91,7 +91,7 @@ def init_db(db_path=None):
         order_number TEXT UNIQUE NOT NULL,
         customer_id INTEGER NOT NULL,
         created_at TEXT NOT NULL,
-        export_status TEXT NOT NULL DEFAULT 'exported',
+        export_status TEXT NOT NULL DEFAULT 'pending',
         order_status TEXT NOT NULL DEFAULT 'submitted',
         submitted_by TEXT,
         assigned_user_id INTEGER,
