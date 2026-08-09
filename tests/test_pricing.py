@@ -217,3 +217,68 @@ def test_quotation_returns_pdf_without_creating_order(client, db):
     assert response.data[:4] == b"%PDF"
     with db() as conn:
         assert conn.execute("SELECT COUNT(*) FROM orders").fetchone()[0] == 0
+
+
+def test_quotation_rejects_out_of_range_price_instead_of_clamping(client, db):
+    # Quotation must reject the same way place_order does, not silently
+    # clamp the price - otherwise the PDF shown to the customer wouldn't
+    # match what the salesman actually typed.
+    _seed(db, salesman_price=80, min_price_percent=90)  # floor = 72
+    login(client, username="sales1", password="Sales123!")
+    with db() as conn:
+        customer_id = conn.execute("SELECT id FROM customers WHERE name = 'Cust'").fetchone()[0]
+
+    response = post_with_csrf(
+        client,
+        "/quotation",
+        {
+            "customer_id": str(customer_id),
+            "items_json": json.dumps([{"sku": "SKU-1", "qty": 1, "unit_price": 50}]),
+        },
+        get_path=f"/catalog/{customer_id}",
+    )
+    assert b"outside the allowed range" in response.data
+    assert response.headers.get("Content-Type") != "application/pdf"
+
+
+def test_vat_rate_above_100_is_rejected_by_admin_settings(client, db):
+    _seed(db)
+    login(client)
+    post_with_csrf(
+        client,
+        "/admin",
+        {"action": "save_settings", "reservation_mode": "on", "allow_oversell": "off",
+         "show_stock_to_customers": "on", "currency_symbol": "SAR", "low_stock_threshold": "5",
+         "credit_limit": "0", "min_price_percent": "100", "vat_rate": "1500"},
+        get_path="/admin",
+    )
+    with db() as conn:
+        stored = conn.execute("SELECT value FROM settings WHERE key = 'vat_rate'").fetchone()["value"]
+    assert float(stored) == 100.0
+
+
+def test_set_salesman_price_rejects_unknown_user_or_sku(client, db):
+    sales_user_id, _ = _seed(db)
+    login(client)
+
+    response = post_with_csrf(
+        client,
+        "/admin",
+        {"action": "set_salesman_price", "pricing_user_id": "999999",
+         "pricing_sku": "SKU-1", "pricing_price": "50"},
+        get_path=f"/admin?salesman_id={sales_user_id}",
+    )
+    assert b"Unknown salesman or SKU" in response.data
+    with db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM salesman_prices").fetchone()[0] == 0
+
+    response = post_with_csrf(
+        client,
+        "/admin",
+        {"action": "set_salesman_price", "pricing_user_id": str(sales_user_id),
+         "pricing_sku": "SKU-DOES-NOT-EXIST", "pricing_price": "50"},
+        get_path=f"/admin?salesman_id={sales_user_id}",
+    )
+    assert b"Unknown salesman or SKU" in response.data
+    with db() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM salesman_prices").fetchone()[0] == 0

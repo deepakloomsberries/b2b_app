@@ -295,7 +295,7 @@ def get_vat_rate():
         value = float(get_setting("vat_rate", "15"))
     except (TypeError, ValueError):
         value = 15.0
-    return max(0.0, value) / 100.0
+    return max(0.0, min(100.0, value)) / 100.0
 
 
 def get_credit_warning(customer):
@@ -2106,6 +2106,7 @@ def quotation():
             return redirect(url_for("home"))
 
         price_overrides = get_salesman_price_overrides(conn, salesman_id)
+        price_violations = []
         quote_items = []
         for item in items:
             sku = item.get("sku")
@@ -2122,7 +2123,14 @@ def quotation():
             base_price = resolve_product_base_price(sku, product, price_overrides)
             price_floor = base_price * min_price_percent / 100
             unit_price = parse_float(item.get("unit_price"), default=base_price)
-            unit_price = min(base_price, max(price_floor, unit_price))
+            # Reject rather than silently clamp: a quotation should never show
+            # a different price than what the salesman asked for, or place_order
+            # could later refuse the exact price already shared with the customer.
+            if unit_price > base_price + 0.01 or unit_price < price_floor - 0.01:
+                price_violations.append(
+                    f"{sku} (allowed {price_floor:.2f}-{base_price:.2f})"
+                )
+                continue
             quote_items.append(
                 {
                     "sku": sku,
@@ -2137,6 +2145,12 @@ def quotation():
                 }
             )
 
+        if price_violations:
+            flash(
+                "Unit price outside the allowed range for: " + ", ".join(price_violations),
+                "error",
+            )
+            return redirect(url_for("catalog", customer_id=customer_id))
         if not quote_items:
             flash("No valid items to quote.", "error")
             return redirect(url_for("catalog", customer_id=customer_id))
@@ -2894,7 +2908,7 @@ def admin():
                 low_stock_threshold = 5
             credit_limit = max(0.0, parse_float(request.form.get("credit_limit", "0")))
             min_price_percent = max(0.0, min(100.0, parse_float(request.form.get("min_price_percent", "100"), default=100.0)))
-            vat_rate_percent = max(0.0, parse_float(request.form.get("vat_rate", "15"), default=15.0))
+            vat_rate_percent = max(0.0, min(100.0, parse_float(request.form.get("vat_rate", "15"), default=15.0)))
             with get_db() as conn:
                 for key, val in [
                     ("reservation_mode", reservation_mode),
@@ -2931,19 +2945,28 @@ def admin():
                 warning = "Salesman, SKU, and a valid price are required."
             else:
                 with get_db() as conn:
-                    conn.execute(
-                        "INSERT INTO salesman_prices (user_id, sku, price, updated_at) VALUES (?, ?, ?, ?) "
-                        "ON CONFLICT(user_id, sku) DO UPDATE SET price = excluded.price, updated_at = excluded.updated_at",
-                        (user_id, sku, price, now_iso()),
-                    )
-                    log_audit(
-                        conn,
-                        "salesman_price_set",
-                        "salesman_prices",
-                        {"user_id": user_id, "sku": sku, "price": price},
-                    )
-                    conn.commit()
-                message = "Salesman price saved."
+                    user_exists = conn.execute(
+                        "SELECT 1 FROM users WHERE id = ?", (user_id,)
+                    ).fetchone()
+                    product_exists = conn.execute(
+                        "SELECT 1 FROM products WHERE sku = ?", (sku,)
+                    ).fetchone()
+                    if not user_exists or not product_exists:
+                        warning = "Unknown salesman or SKU."
+                    else:
+                        conn.execute(
+                            "INSERT INTO salesman_prices (user_id, sku, price, updated_at) VALUES (?, ?, ?, ?) "
+                            "ON CONFLICT(user_id, sku) DO UPDATE SET price = excluded.price, updated_at = excluded.updated_at",
+                            (user_id, sku, price, now_iso()),
+                        )
+                        log_audit(
+                            conn,
+                            "salesman_price_set",
+                            "salesman_prices",
+                            {"user_id": user_id, "sku": sku, "price": price},
+                        )
+                        conn.commit()
+                        message = "Salesman price saved."
         elif action == "clear_salesman_price":
             user_id = parse_int(request.form.get("pricing_user_id"))
             sku = request.form.get("pricing_sku", "").strip()
