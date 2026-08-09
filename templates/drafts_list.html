@@ -1,45 +1,45 @@
 {% extends "base.html" %}
 
+{% block body_class %}mobile-ui{% endblock %}
+
 {% block content %}
-<section class="page-header">
-    <div>
-        <h1>Draft Orders</h1>
-        <p>Resume or clear saved drafts.</p>
-    </div>
+<header class="app-header with-back">
+    <a class="back-button" href="{{ url_for('home') }}" aria-label="Back">←</a>
+    <h1>Draft Orders</h1>
+</header>
+<p class="cart-note">Resume or clear saved drafts.</p>
+
+<section class="buyer-list">
+    {% for draft in drafts %}
+        <article class="buyer-card">
+            <div class="buyer-avatar">{{ draft.customer_name[:1] }}</div>
+            <div class="buyer-content">
+                <div class="buyer-name">{{ draft.customer_name }}</div>
+                <div class="buyer-summary">
+                    <span>Updated: {{ draft.updated_at|format_dt }}</span>
+                    <span>{{ draft.total_qty }} item{{ "" if draft.total_qty == 1 else "s" }} · SAR {{ '%.2f'|format(draft.total_amount) }}</span>
+                </div>
+                <div class="buyer-actions">
+                    <a class="outline-button" href="{{ url_for('catalog', customer_id=draft.customer_id, draft_id=draft.id) }}">Resume</a>
+                    <form method="post" action="{{ url_for('delete_draft', draft_id=draft.id) }}" data-confirm="Clear this draft for {{ draft.customer_name }}?">
+                        {% include "_csrf_field.html" %}
+                        <button type="submit" class="outline-button">Clear</button>
+                    </form>
+                </div>
+            </div>
+        </article>
+    {% else %}
+        <div class="empty-state">No drafts saved.</div>
+    {% endfor %}
 </section>
 
-<table class="table">
-    <thead>
-        <tr>
-            <th>Buyer</th>
-            <th>Last Updated</th>
-            <th>Total Qty</th>
-            <th>Total Amount</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for draft in drafts %}
-            <tr>
-                <td>{{ draft.customer_name }}</td>
-                <td>{{ draft.updated_at }}</td>
-                <td>{{ draft.total_qty }}</td>
-                <td>SAR {{ '%.2f'|format(draft.total_amount) }}</td>
-                <td>
-                    <div class="action-row">
-                        <a class="button small" href="{{ url_for('catalog', customer_id=draft.customer_id, draft_id=draft.id) }}">Resume</a>
-                        <form method="post" action="{{ url_for('delete_draft', draft_id=draft.id) }}">
-                            {% include "_csrf_field.html" %}
-                            <button type="submit" class="button small danger">Clear</button>
-                        </form>
-                    </div>
-                </td>
-            </tr>
-        {% else %}
-            <tr>
-                <td colspan="5">No drafts saved.</td>
-            </tr>
-        {% endfor %}
-    </tbody>
-</table>
+<script>
+    document.querySelectorAll('[data-confirm]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (!confirm(form.dataset.confirm)) {
+                event.preventDefault();
+            }
+        });
+    });
+</script>
 {% endblock %}

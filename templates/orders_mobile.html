@@ -6,13 +6,48 @@
 <header class="mobile-page-header">
     <a class="back-button" href="{{ url_for('dashboard_mobile') }}" aria-label="Back">←</a>
     <h1>Order List</h1>
-    <button class="icon-button" type="button" aria-label="Filter">☰</button>
+    <button class="icon-button" type="button" id="open-order-filter" aria-label="Filter">☰</button>
 </header>
 
 <div class="mobile-toolbar">
-    <span class="toolbar-label">Sort by Order Date</span>
-    <button class="icon-button" type="button" aria-label="Sort">⇅</button>
+    <span class="toolbar-label">Sort by Order Date ({{ "Oldest first" if sort_dir == "asc" else "Newest first" }})</span>
+    <a class="icon-button"
+       href="{{ url_for('orders_mobile', status=status_filter, start_date=start_date, end_date=end_date, sort='desc' if sort_dir == 'asc' else 'asc') }}"
+       aria-label="Toggle sort direction">⇅</a>
 </div>
+
+<dialog id="order-filter-dialog" class="modal">
+    <div class="modal-surface">
+        <div class="modal-header">
+            <h3>Filter Orders</h3>
+            <button type="button" class="icon-button" id="close-order-filter" aria-label="Close">×</button>
+        </div>
+        <form method="get" class="form-card">
+            <label>
+                Status
+                <select name="status">
+                    <option value="" {% if not status_filter %}selected{% endif %}>All</option>
+                    {% for status in ["submitted", "accepted", "packed", "shipped", "delivered", "cancelled"] %}
+                        <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>{{ status|capitalize }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                From
+                <input type="date" name="start_date" value="{{ start_date }}">
+            </label>
+            <label>
+                To
+                <input type="date" name="end_date" value="{{ end_date }}">
+            </label>
+            <input type="hidden" name="sort" value="{{ sort_dir }}">
+            <div class="action-row">
+                <button type="submit" class="button">Apply</button>
+                <a class="button secondary" href="{{ url_for('orders_mobile') }}">Clear</a>
+            </div>
+        </form>
+    </div>
+</dialog>
 
 <section class="order-cards">
     {% if orders %}
@@ -42,7 +77,11 @@
                             <a href="mailto:{{ order.customer_email }}" aria-label="Email">✉️</a>
                         {% endif %}
                         <button type="button" class="view-order" data-order-number="{{ order.order_number }}" aria-label="View order">📄</button>
-                        <button type="button" aria-label="Share">↗</button>
+                        <button type="button" class="share-order"
+                                data-order-number="{{ order.order_number }}"
+                                data-customer-name="{{ order.customer_name }}"
+                                data-total-amount="{{ '%.2f'|format(order.total_amount) }}"
+                                aria-label="Share">↗</button>
                     </div>
                 </div>
             </article>
@@ -65,10 +104,62 @@
 <nav class="mobile-bottom-nav">
     <a href="{{ url_for('dashboard_mobile') }}">Dashboard</a>
     <a class="active" href="{{ url_for('orders_mobile') }}">Orders</a>
-    <span>Profile</span>
-    <span>Payments</span>
-    <span>Search</span>
+    <a href="{{ url_for('customers_list') }}">Buyers</a>
+    <a href="{{ url_for('home') }}">Home</a>
 </nav>
 
+<script>
+    const filterDialog = document.getElementById('order-filter-dialog');
+    const openFilter = document.getElementById('open-order-filter');
+    const closeFilter = document.getElementById('close-order-filter');
+    const openDialogEl = (dialog) => {
+        if (!dialog) return;
+        if (typeof dialog.showModal === 'function') {
+            dialog.showModal();
+        } else {
+            dialog.classList.add('is-open');
+            dialog.setAttribute('open', '');
+        }
+    };
+    const closeDialogEl = (dialog) => {
+        if (!dialog) return;
+        if (typeof dialog.close === 'function') {
+            dialog.close();
+        } else {
+            dialog.classList.remove('is-open');
+            dialog.removeAttribute('open');
+        }
+    };
+    openFilter?.addEventListener('click', () => openDialogEl(filterDialog));
+    closeFilter?.addEventListener('click', () => closeDialogEl(filterDialog));
+    filterDialog?.addEventListener('click', (event) => {
+        if (event.target === filterDialog) {
+            closeDialogEl(filterDialog);
+        }
+    });
+
+    document.querySelectorAll('.share-order').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const orderNumber = button.dataset.orderNumber;
+            const text = `Order ${orderNumber} - ${button.dataset.customerName} - SAR ${button.dataset.totalAmount}`;
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: `Order ${orderNumber}`, text });
+                } catch (error) {
+                    // User cancelled or share failed silently; nothing to do.
+                }
+            } else if (navigator.clipboard) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    alert('Order details copied to clipboard.');
+                } catch (error) {
+                    alert(text);
+                }
+            } else {
+                alert(text);
+            }
+        });
+    });
+</script>
 <script src="{{ static_url('js/orders_mobile.js') }}"></script>
 {% endblock %}

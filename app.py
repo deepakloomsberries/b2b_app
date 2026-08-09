@@ -1583,6 +1583,7 @@ def orders_mobile():
     status_filter = request.args.get("status", "").strip().lower()
     start_date = request.args.get("start_date", "").strip()
     end_date = request.args.get("end_date", "").strip()
+    sort_dir = "asc" if request.args.get("sort", "").strip().lower() == "asc" else "desc"
 
     filters = []
     params = []
@@ -1596,6 +1597,7 @@ def orders_mobile():
         filters.append("o.created_at <= ?")
         params.append(f"{end_date}T23:59:59")
     where_clause = f"WHERE {' AND '.join(filters)}" if filters else ""
+    order_by_sql = "ASC" if sort_dir == "asc" else "DESC"
 
     with get_db() as conn:
         orders = conn.execute(
@@ -1608,7 +1610,7 @@ def orders_mobile():
             "LEFT JOIN order_items oi ON o.id = oi.order_id "
             f"{where_clause} "
             "GROUP BY o.id "
-            "ORDER BY o.created_at DESC "
+            f"ORDER BY o.created_at {order_by_sql} "
             "LIMIT 200",
             params,
         ).fetchall()
@@ -1636,6 +1638,7 @@ def orders_mobile():
         status_filter=status_filter,
         start_date=start_date,
         end_date=end_date,
+        sort_dir=sort_dir,
     )
 
 

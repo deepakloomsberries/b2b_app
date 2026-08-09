@@ -34,8 +34,7 @@
 <nav class="mobile-bottom-nav">
     <a class="active" href="{{ url_for('dashboard_mobile') }}">Dashboard</a>
     <a href="{{ url_for('orders_mobile') }}">Orders</a>
-    <span>Profile</span>
-    <span>Payments</span>
-    <span>Search</span>
+    <a href="{{ url_for('customers_list') }}">Buyers</a>
+    <a href="{{ url_for('home') }}">Home</a>
 </nav>
 {% endblock %}
