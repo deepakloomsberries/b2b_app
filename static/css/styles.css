@@ -2350,6 +2350,69 @@ select:focus-visible {
     grid-template-columns: minmax(320px, 1fr);
 }
 
+.admin-section-wide {
+    grid-column: span 2;
+}
+
+@media (max-width: 900px) {
+    .admin-section-wide {
+        grid-column: span 1;
+    }
+}
+
+.admin-quick-actions {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 4px;
+}
+
+.admin-quick-action {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.admin-quick-action:last-child {
+    border-bottom: none;
+    padding-bottom: 4px;
+}
+
+.admin-quick-action .title {
+    font-weight: 600;
+}
+
+.admin-quick-action .meta {
+    color: var(--secondary);
+    font-size: 0.85rem;
+    margin-top: 2px;
+}
+
+.admin-quick-action form {
+    margin-top: 0;
+    flex-shrink: 0;
+}
+
+.admin-inline-form {
+    flex-wrap: wrap;
+    align-items: flex-end;
+}
+
+.admin-inline-label {
+    display: grid;
+    gap: 6px;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+.admin-inline-label input {
+    width: 140px;
+}
+
 .admin-items-grid {
     grid-template-columns: minmax(320px, 1.1fr) minmax(320px, 0.9fr);
 }
@@ -2999,11 +3062,14 @@ body.no-scroll {
 .code-block {
     font-family: "Courier New", monospace;
     font-size: 0.85rem;
+    line-height: 1.6;
     background: #f3f4f6;
-    padding: 8px;
-    border-radius: 6px;
+    color: var(--text-soft);
+    padding: 12px;
+    border-radius: var(--radius-sm);
     margin-bottom: 12px;
-    overflow-x: auto;
+    white-space: normal;
+    word-break: break-word;
 }
 
 @media (max-width: 768px) {

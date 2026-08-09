@@ -6,7 +6,7 @@
 <section class="page-header">
     <div>
         <h1>Admin</h1>
-        <p>Catalogue and sync settings.</p>
+        <p>Manage the catalogue, pricing, users, and app configuration.</p>
     </div>
 </section>
 
@@ -34,10 +34,10 @@
 
 <div class="admin-tab-panel" id="admin-panel-catalogue" role="tabpanel" data-tab="catalogue">
     <div class="admin-grid">
-        <div class="card admin-section">
+        <div class="card admin-section admin-section-wide">
             <h2>Upload Catalogue CSV/Excel</h2>
             <p>Choose replace or upsert. CSV/Excel columns:</p>
-            <div class="code-block">sku,title,price,cash_price,credit_price,category,subcategory,sub_subcategory,mfr_no,sort_order,image_url,image_url_1,image_url_2,image_url_3,image_url_4,category_image_url,subcategory_image_url,sub_subcategory_image_url</div>
+            <div class="code-block">sku, title, price, cash_price, credit_price, category, subcategory, sub_subcategory, mfr_no, sort_order, image_url, image_url_1, image_url_2, image_url_3, image_url_4, category_image_url, subcategory_image_url, sub_subcategory_image_url</div>
             <div class="admin-actions">
                 <a class="button secondary small" href="{{ url_for('download_catalogue') }}">Download current catalogue</a>
                 <a class="button secondary small" href="{{ url_for('download_catalogue_sample') }}">Download sample file</a>
@@ -87,39 +87,50 @@
             </script>
         </div>
         <div class="card admin-section">
-            <h2>Stock Sync</h2>
-            <p>Sync stock from Google Sheets.</p>
-            <form method="post" class="form-card compact">
-                {% include "_csrf_field.html" %}
-                <input type="hidden" name="action" value="sync_stock">
-                <button type="submit" class="button secondary">Sync Stock Now</button>
-            </form>
-        </div>
-        <div class="card admin-section">
-            <h2>Export Failed Orders</h2>
-            <p>Retry exporting any failed orders.</p>
-            <form method="post" class="form-card compact">
-                {% include "_csrf_field.html" %}
-                <input type="hidden" name="action" value="retry_exports">
-                <button type="submit" class="button secondary">Retry Export Failed Orders</button>
-            </form>
-        </div>
-        <div class="card admin-section">
-            <h2>Settings</h2>
-            <p>Product view: <strong>{{ view_setting }}</strong></p>
-            <a class="button secondary small" href="{{ url_for('admin_items') }}">Manage items</a>
+            <h2>Quick Actions</h2>
+            <ul class="admin-quick-actions">
+                <li class="admin-quick-action">
+                    <div>
+                        <div class="title">Stock Sync</div>
+                        <div class="meta">Pull the latest quantities from Google Sheets.</div>
+                    </div>
+                    <form method="post" class="inline-form">
+                        {% include "_csrf_field.html" %}
+                        <input type="hidden" name="action" value="sync_stock">
+                        <button type="submit" class="button secondary small">Sync Now</button>
+                    </form>
+                </li>
+                <li class="admin-quick-action">
+                    <div>
+                        <div class="title">Export Failed Orders</div>
+                        <div class="meta">Retry orders that failed to export to Sheets.</div>
+                    </div>
+                    <form method="post" class="inline-form">
+                        {% include "_csrf_field.html" %}
+                        <input type="hidden" name="action" value="retry_exports">
+                        <button type="submit" class="button secondary small">Retry</button>
+                    </form>
+                </li>
+                <li class="admin-quick-action">
+                    <div>
+                        <div class="title">Catalogue View</div>
+                        <div class="meta">Shared grid/list view for browsing products: <strong>{{ view_setting }}</strong></div>
+                    </div>
+                    <a class="button secondary small" href="{{ url_for('admin_items') }}">Manage Items</a>
+                </li>
+            </ul>
         </div>
         <div class="card admin-section">
             <h2>Stock Adjustment</h2>
             <p>Manually set stock for a SKU.</p>
-            <form method="post" class="form-card compact">
+            <form method="post" class="pricing-form admin-inline-form">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="adjust_stock">
-                <label>
+                <label class="admin-inline-label">
                     SKU
                     <input type="text" name="stock_sku" required>
                 </label>
-                <label>
+                <label class="admin-inline-label">
                     Stock Qty
                     <input type="number" name="stock_qty" required>
                 </label>
