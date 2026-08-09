@@ -1777,6 +1777,44 @@ h2 {
     border-bottom: 1px solid var(--border-soft);
 }
 
+.admin-subheading {
+    font-size: 0.95rem;
+    margin: 24px 0 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+.form-section-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--secondary);
+    margin: 4px 0 -4px;
+}
+
+.form-section-label:first-child {
+    margin-top: 0;
+}
+
+.admin-add-details summary.button {
+    cursor: pointer;
+    list-style: none;
+    width: fit-content;
+}
+
+.admin-add-details summary.button::-webkit-details-marker {
+    display: none;
+}
+
+.admin-add-details[open] summary.button {
+    margin-bottom: 18px;
+}
+
+.admin-add-form {
+    margin-top: 4px;
+}
+
 .form-card {
     max-width: 420px;
     display: grid;
@@ -1849,19 +1887,45 @@ select:focus-visible {
     box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
+.table-scroll {
+    overflow-x: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-soft);
+}
+
 .table {
     width: 100%;
     border-collapse: collapse;
     background: var(--card);
-    border-radius: 12px;
-    overflow: hidden;
 }
 
 .table th,
 .table td {
-    padding: 12px;
-    border-bottom: 1px solid var(--border);
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-soft);
     text-align: left;
+    white-space: nowrap;
+}
+
+.table th {
+    background: #f8fafc;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-soft);
+}
+
+.table tbody tr:hover {
+    background: #f9fafb;
+}
+
+.table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.nowrap {
+    white-space: nowrap;
 }
 
 .empty-state {
@@ -2565,6 +2629,12 @@ select:focus-visible {
     border-radius: 8px;
     object-fit: cover;
     border: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.admin-list-item > div {
+    flex: 1 1 auto;
+    min-width: 0;
 }
 
 .admin-list-item .title {
@@ -2574,6 +2644,7 @@ select:focus-visible {
 .admin-list-item .meta {
     color: var(--secondary);
     font-size: 0.85rem;
+    overflow-wrap: anywhere;
 }
 
 .admin-item-actions {

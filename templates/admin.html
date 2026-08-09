@@ -426,36 +426,42 @@
 <div class="admin-tab-panel" id="admin-panel-users" role="tabpanel" data-tab="users">
     <div class="admin-grid admin-grid-single">
         <div class="card admin-section">
-            <h2>User Management</h2>
+            <h2>Add User</h2>
             <form method="post" class="form-card compact">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="add_user">
-                <label>
-                    Name
-                    <input type="text" name="user_name" required>
-                </label>
-                <label>
-                    Email
-                    <input type="email" name="user_email" required>
-                </label>
-                <label>
-                    Phone
-                    <input type="text" name="user_phone">
-                </label>
-                <label>
-                    Role
-                    <select name="user_role">
-                        <option value="user">User</option>
-                        <option value="warehouse">Warehouse</option>
-                        <option value="admin">Admin</option>
-                    </select>
-                </label>
+                <div class="form-row">
+                    <label class="form-field">
+                        <span>Name</span>
+                        <input type="text" name="user_name" required>
+                    </label>
+                    <label class="form-field">
+                        <span>Email</span>
+                        <input type="email" name="user_email" required>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <label class="form-field">
+                        <span>Phone</span>
+                        <input type="text" name="user_phone">
+                    </label>
+                    <label class="form-field">
+                        <span>Role</span>
+                        <select name="user_role">
+                            <option value="user">User</option>
+                            <option value="warehouse">Warehouse</option>
+                            <option value="admin">Admin</option>
+                        </select>
+                    </label>
+                </div>
                 <label>
                     Password
                     <input type="password" name="user_password" required>
                 </label>
                 <button type="submit" class="button">Add User</button>
             </form>
+            <h2 class="admin-subheading">Existing Users</h2>
+            <div class="table-scroll">
             <table class="table">
                 <thead>
                     <tr>
@@ -504,6 +510,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>
@@ -553,7 +560,7 @@
                 <button type="submit" class="button">Send Notification</button>
             </form>
 
-            <h3>Recent notifications</h3>
+            <h2 class="admin-subheading">Recent Notifications</h2>
             <ul class="admin-list">
                 {% for notification in admin_notifications %}
                     <li class="admin-list-item">
@@ -589,13 +596,17 @@
         <div class="card admin-section">
             <h2>Customer Management</h2>
             <p>Add, edit, or remove buyer details.</p>
-            <form method="post" class="form-card compact">
+            <details class="admin-add-details">
+                <summary class="button">+ Add Customer</summary>
+                <form method="post" class="form-card compact admin-add-form">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="add_customer">
+                <div class="form-section-label">Business</div>
                 <label>
                     Business Name
                     <input type="text" name="name" required>
                 </label>
+                <div class="form-section-label">Contact</div>
                 <div class="form-row">
                     <label class="form-field">
                         <span>Phone Code</span>
@@ -610,6 +621,7 @@
                     Email
                     <input type="email" name="email">
                 </label>
+                <div class="form-section-label">Location</div>
                 <label>
                     Address
                     <input type="text" name="address" required>
@@ -642,6 +654,7 @@
                     Zip Code
                     <input type="text" name="zip_code">
                 </label>
+                <div class="form-section-label">Classification</div>
                 <label>
                     Buyer Group
                     <select name="buyer_group">
@@ -670,7 +683,9 @@
                     <span>APP USER (Tick here if buyer is the app user)</span>
                 </label>
                 <button type="submit" class="button">Add Customer</button>
-            </form>
+                </form>
+            </details>
+            <h2 class="admin-subheading">Buyers ({{ admin_customers|length }})</h2>
             <ul class="admin-list">
                 {% for customer in admin_customers %}
                     <li class="admin-list-item">
@@ -686,10 +701,12 @@
                                     {% include "_csrf_field.html" %}
                                     <input type="hidden" name="action" value="update_customer">
                                     <input type="hidden" name="customer_id" value="{{ customer.id }}">
+                                    <div class="form-section-label">Business</div>
                                     <label>
                                         Business Name
                                         <input type="text" name="name" value="{{ customer.name }}" required>
                                     </label>
+                                    <div class="form-section-label">Contact</div>
                                     <div class="form-row">
                                         <label class="form-field">
                                             <span>Phone Code</span>
@@ -704,6 +721,7 @@
                                         Email
                                         <input type="email" name="email" value="{{ customer.email or '' }}">
                                     </label>
+                                    <div class="form-section-label">Location</div>
                                     <label>
                                         Address
                                         <input type="text" name="address" value="{{ customer.address or '' }}" required>
@@ -736,6 +754,7 @@
                                         Zip Code
                                         <input type="text" name="zip_code" value="{{ customer.zip_code or '' }}">
                                     </label>
+                                    <div class="form-section-label">Classification</div>
                                     <label>
                                         Buyer Group
                                         <select name="buyer_group">
@@ -790,6 +809,7 @@
             <h2>Sales Rep Performance</h2>
             <p>Orders and revenue for the current month.</p>
             <div class="pill muted">Conversion rate: {{ conversion_rate }}%</div>
+            <div class="table-scroll">
             <table class="table">
                 <thead>
                     <tr>
@@ -812,6 +832,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
         </div>
         <div class="card admin-section">
             <h2>Customer Health Score</h2>
@@ -839,6 +860,7 @@
         <div class="card admin-section">
             <h2>Audit Logs</h2>
             <p>Track critical admin actions across catalogue, users, and stock.</p>
+            <div class="table-scroll">
             <table class="table">
                 <thead>
                     <tr>
@@ -851,9 +873,9 @@
                 <tbody>
                     {% for log in audit_logs %}
                         <tr>
-                            <td>{{ log.created_at }}</td>
+                            <td class="nowrap">{{ log.created_at|format_dt }}</td>
                             <td>{{ log.actor }}</td>
-                            <td>{{ log.action }}</td>
+                            <td>{{ log.action|replace('_', ' ')|capitalize }}</td>
                             <td>{{ log.entity }}</td>
                         </tr>
                     {% else %}
@@ -863,6 +885,7 @@
                     {% endfor %}
                 </tbody>
             </table>
+            </div>
         </div>
     </div>
 </div>
