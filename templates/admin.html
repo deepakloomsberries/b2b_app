@@ -23,6 +23,7 @@
     <button class="admin-tab" type="button" role="tab" data-tab="catalogue" aria-controls="admin-panel-catalogue">Catalogue &amp; Stock</button>
     <button class="admin-tab" type="button" role="tab" data-tab="images" aria-controls="admin-panel-images">Images</button>
     <button class="admin-tab" type="button" role="tab" data-tab="products" aria-controls="admin-panel-products">Products</button>
+    <button class="admin-tab" type="button" role="tab" data-tab="pricing" aria-controls="admin-panel-pricing">Salesman Pricing</button>
     <button class="admin-tab" type="button" role="tab" data-tab="users" aria-controls="admin-panel-users">Users</button>
     <button class="admin-tab" type="button" role="tab" data-tab="notifications" aria-controls="admin-panel-notifications">Notifications</button>
     <button class="admin-tab" type="button" role="tab" data-tab="customers" aria-controls="admin-panel-customers">Customers</button>
@@ -58,7 +59,7 @@
         <div class="card admin-section">
             <h2>Stock Sync</h2>
             <p>Sync stock from Google Sheets.</p>
-            <form method="post">
+            <form method="post" class="form-card compact">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="sync_stock">
                 <button type="submit" class="button secondary">Sync Stock Now</button>
@@ -67,7 +68,7 @@
         <div class="card admin-section">
             <h2>Export Failed Orders</h2>
             <p>Retry exporting any failed orders.</p>
-            <form method="post">
+            <form method="post" class="form-card compact">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="retry_exports">
                 <button type="submit" class="button secondary">Retry Export Failed Orders</button>
@@ -81,7 +82,7 @@
         <div class="card admin-section">
             <h2>Stock Adjustment</h2>
             <p>Manually set stock for a SKU.</p>
-            <form method="post">
+            <form method="post" class="form-card compact">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="adjust_stock">
                 <label>
@@ -103,7 +104,7 @@
         <div class="card admin-section">
             <h2>Category Images</h2>
             <p>Recommended size: 200x200 px.</p>
-            <form method="post">
+            <form method="post" class="form-card compact">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="add_category_image">
                 <label>
@@ -148,7 +149,7 @@
         <div class="card admin-section">
             <h2>Subcategory Images</h2>
             <p>Recommended size: 200x200 px.</p>
-            <form method="post">
+            <form method="post" class="form-card compact">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="add_subcategory_image">
                 <label>
@@ -203,7 +204,7 @@
         <div class="card admin-section">
             <h2>Sub-subcategory Images</h2>
             <p>Recommended size: 200x200 px.</p>
-            <form method="post">
+            <form method="post" class="form-card compact">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="add_sub_subcategory_image">
                 <label>
@@ -306,6 +307,72 @@
                                 {{ "Hide" if product.is_active else "Show" }}
                             </button>
                         </form>
+                    </li>
+                {% else %}
+                    <li class="admin-list-item">No products available.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="admin-tab-panel" id="admin-panel-pricing" role="tabpanel" data-tab="pricing">
+    <div class="admin-grid admin-grid-single">
+        <div class="card admin-section">
+            <h2>Salesman-Wise Pricing</h2>
+            <p>Set a custom price per salesman for any product. Orders and quotations they create use this price instead of the standard one. Salesmen can discount further down to the floor set in Settings, but never above their assigned price.</p>
+            <form method="get" class="admin-search">
+                <select name="salesman_id" onchange="this.form.submit()">
+                    {% for salesman in salesmen %}
+                        <option value="{{ salesman.id }}" {% if salesman.id == pricing_salesman_id %}selected{% endif %}>
+                            {{ salesman.name }} ({{ salesman.role }})
+                        </option>
+                    {% else %}
+                        <option value="">No users yet</option>
+                    {% endfor %}
+                </select>
+                <input type="text" name="psq" placeholder="Search by SKU or title" value="{{ pricing_query }}">
+                <input type="hidden" name="pspage" value="1">
+                <button type="submit" class="button secondary small">Apply</button>
+            </form>
+            <div class="admin-meta">
+                Showing {{ pricing_products|length }} of {{ pricing_total }} products (page {{ pricing_page }}) —
+                {{ pricing_override_count }} custom price{{ "" if pricing_override_count == 1 else "s" }} set for this salesman.
+            </div>
+            <div class="admin-pagination">
+                {% if pricing_page > 1 %}
+                    <a class="button small secondary" href="{{ url_for('admin', salesman_id=pricing_salesman_id, psq=pricing_query, pslimit=pricing_limit, pspage=pricing_page-1) }}#pricing">Previous</a>
+                {% endif %}
+                {% if pricing_has_more %}
+                    <a class="button small secondary" href="{{ url_for('admin', salesman_id=pricing_salesman_id, psq=pricing_query, pslimit=pricing_limit, pspage=pricing_page+1) }}#pricing">Next</a>
+                {% endif %}
+            </div>
+            <ul class="admin-list pricing-list">
+                {% for product in pricing_products %}
+                    <li class="admin-list-item pricing-row">
+                        <div>
+                            <div class="title">{{ product.title }}</div>
+                            <div class="meta">SKU: {{ product.sku }} · Standard: {{ app_settings.currency_symbol }} {{ '%.2f'|format(product.price if product.price is not none else product.price_credit or 0) }}</div>
+                        </div>
+                        <form method="post" class="inline-form pricing-form">
+                            {% include "_csrf_field.html" %}
+                            <input type="hidden" name="action" value="set_salesman_price">
+                            <input type="hidden" name="pricing_user_id" value="{{ pricing_salesman_id }}">
+                            <input type="hidden" name="pricing_sku" value="{{ product.sku }}">
+                            <input type="number" name="pricing_price" step="0.01" min="0"
+                                   placeholder="Custom price"
+                                   value="{{ '%.2f'|format(product.override_price) if product.override_price is not none else '' }}">
+                            <button type="submit" class="button small">Save</button>
+                        </form>
+                        {% if product.override_price is not none %}
+                            <form method="post" class="inline-form">
+                                {% include "_csrf_field.html" %}
+                                <input type="hidden" name="action" value="clear_salesman_price">
+                                <input type="hidden" name="pricing_user_id" value="{{ pricing_salesman_id }}">
+                                <input type="hidden" name="pricing_sku" value="{{ product.sku }}">
+                                <button type="submit" class="button small secondary">Clear</button>
+                            </form>
+                        {% endif %}
                     </li>
                 {% else %}
                     <li class="admin-list-item">No products available.</li>
@@ -763,7 +830,7 @@
     <div class="admin-grid">
         <div class="card admin-section">
             <h2>Stock &amp; Order Settings</h2>
-            <form method="post">
+            <form method="post" class="form-card compact">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="save_settings">
 
@@ -821,6 +888,20 @@
                            value="{{ app_settings.credit_limit }}">
                 </label>
 
+                <label>
+                    <strong>VAT Rate (%)</strong>
+                    <span class="muted label-hint">Used on the subtotal/VAT/total breakdown shown on order review, confirmation, PDF exports, and quotations.</span>
+                    <input type="number" name="vat_rate" min="0" max="100" step="0.1"
+                           value="{{ app_settings.vat_rate }}">
+                </label>
+
+                <label>
+                    <strong>Salesman Discount Floor (%)</strong>
+                    <span class="muted label-hint">How far below their assigned price a salesman may discount a line item at order time, as a % of that price. 100 = no discretion (default); e.g. 90 allows up to a 10% discount. Manage each salesman's assigned price in the Salesman Pricing tab.</span>
+                    <input type="number" name="min_price_percent" min="0" max="100" step="1"
+                           value="{{ app_settings.min_price_percent }}">
+                </label>
+
                 <button type="submit" class="button">Save Settings</button>
             </form>
         </div>
@@ -833,6 +914,8 @@
                 <li><strong>Low stock threshold:</strong> {{ app_settings.low_stock_threshold }}</li>
                 <li><strong>Currency:</strong> {{ app_settings.currency_symbol }}</li>
                 <li><strong>Credit limit:</strong> {{ app_settings.currency_symbol }} {{ '%.2f'|format(app_settings.credit_limit) }}{% if app_settings.credit_limit == 0 %} (disabled){% endif %}</li>
+                <li><strong>VAT rate:</strong> {{ app_settings.vat_rate }}%</li>
+                <li><strong>Salesman discount floor:</strong> {{ app_settings.min_price_percent }}%{% if app_settings.min_price_percent == 100 %} (no discretion){% endif %}</li>
             </ul>
         </div>
     </div>

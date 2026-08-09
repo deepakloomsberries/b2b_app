@@ -176,7 +176,7 @@
     <div class="card admin-section">
         <h2>Category Icons</h2>
         <p>Recommended size: 200x200 px.</p>
-        <form method="post">
+        <form method="post" class="form-card compact">
             {% include "_csrf_field.html" %}
             <input type="hidden" name="action" value="add_category_image">
             <label>
@@ -221,7 +221,7 @@
     <div class="card admin-section">
         <h2>Subcategory Icons</h2>
         <p>Recommended size: 200x200 px.</p>
-        <form method="post">
+        <form method="post" class="form-card compact">
             {% include "_csrf_field.html" %}
             <input type="hidden" name="action" value="add_subcategory_image">
             <label>
@@ -276,7 +276,7 @@
     <div class="card admin-section">
         <h2>Sub-subcategory Icons</h2>
         <p>Recommended size: 200x200 px.</p>
-        <form method="post">
+        <form method="post" class="form-card compact">
             {% include "_csrf_field.html" %}
             <input type="hidden" name="action" value="add_sub_subcategory_image">
             <label>
