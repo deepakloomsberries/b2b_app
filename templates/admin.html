@@ -42,19 +42,49 @@
                 <a class="button secondary small" href="{{ url_for('download_catalogue') }}">Download current catalogue</a>
                 <a class="button secondary small" href="{{ url_for('download_catalogue_sample') }}">Download sample file</a>
             </div>
-            <form method="post" enctype="multipart/form-data">
+            <form method="post" enctype="multipart/form-data" id="catalogue-upload-form">
                 {% include "_csrf_field.html" %}
                 <input type="hidden" name="action" value="upload_catalogue">
                 <label>
                     Upload mode
-                    <select name="upload_mode">
-                        <option value="replace">Replace all products</option>
-                        <option value="upsert">Upsert by SKU</option>
+                    <select name="upload_mode" id="upload-mode-select">
+                        <option value="upsert" selected>Add / update by SKU (safe) — only touches SKUs in this file</option>
+                        <option value="replace">Replace ALL products — deletes every product not in this file</option>
                     </select>
                 </label>
+                <div class="warning-banner" id="replace-mode-warning" hidden>
+                    ⚠ "Replace ALL products" deletes every existing product that is not in the file you upload,
+                    including their images and stock links. Use "Add / update by SKU" to add a new item without
+                    affecting the rest of your catalogue.
+                </div>
                 <input type="file" name="catalogue_csv" accept=".csv,.xlsx" required>
                 <button type="submit" class="button">Upload</button>
             </form>
+            <script>
+                (() => {
+                    const form = document.getElementById('catalogue-upload-form');
+                    const modeSelect = document.getElementById('upload-mode-select');
+                    const warning = document.getElementById('replace-mode-warning');
+                    const toggleWarning = () => {
+                        if (warning) {
+                            warning.hidden = modeSelect.value !== 'replace';
+                        }
+                    };
+                    modeSelect?.addEventListener('change', toggleWarning);
+                    toggleWarning();
+                    form?.addEventListener('submit', (event) => {
+                        if (modeSelect.value === 'replace') {
+                            const confirmed = window.confirm(
+                                'This will DELETE every product not in this file, including images and stock links. ' +
+                                'This cannot be undone. Are you sure you want to replace the entire catalogue?'
+                            );
+                            if (!confirmed) {
+                                event.preventDefault();
+                            }
+                        }
+                    });
+                })();
+            </script>
         </div>
         <div class="card admin-section">
             <h2>Stock Sync</h2>

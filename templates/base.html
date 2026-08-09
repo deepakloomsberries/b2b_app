@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>B2B Order App</title>
-    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link rel="manifest" href="{{ static_url('manifest.json') }}">
     <meta name="theme-color" content="#1f6feb">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -13,9 +13,9 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
-    <link rel="icon" href="{{ url_for('static', filename='icons/app-icon.svg') }}" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/app-icon.svg') }}">
+    <link rel="stylesheet" href="{{ static_url('css/styles.css') }}">
+    <link rel="icon" href="{{ static_url('icons/app-icon.svg') }}" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="{{ static_url('icons/app-icon.svg') }}">
 </head>
 <body class="{% block body_class %}{% endblock %} app-animated">
     <div class="loading-overlay" id="loading-overlay">
@@ -23,7 +23,7 @@
         <span>Loading...</span>
     </div>
     <header class="top-bar">
-        <div class="logo"><img src="{{ url_for('static', filename='icons/app-icon.svg') }}" alt="B2B Order App logo"><span>B2B Order App</span></div>
+        <div class="logo"><img src="{{ static_url('icons/app-icon.svg') }}" alt="B2B Order App logo"><span>B2B Order App</span></div>
         {% if session.get('user') %}
             <button class="notification-toggle" type="button" aria-label="Open notifications" aria-expanded="false">
                 <span class="notification-icon">🔔</span>

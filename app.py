@@ -298,6 +298,21 @@ def get_vat_rate():
     return max(0.0, min(100.0, value)) / 100.0
 
 
+def static_url(filename):
+    """URL for a static file with a cache-busting ?v=<mtime> query string, so
+    browsers fetch new CSS/JS right after a deploy instead of serving a stale
+    cached copy until the user does a hard refresh."""
+    file_path = os.path.join(app.static_folder, filename)
+    try:
+        version = int(os.path.getmtime(file_path))
+    except OSError:
+        version = 0
+    return url_for("static", filename=filename, v=version)
+
+
+app.jinja_env.globals["static_url"] = static_url
+
+
 def get_credit_warning(customer):
     """Return a warning dict if the customer's outstanding balance exceeds the
     configured credit limit, or None if the limit is disabled (0) or not exceeded."""
@@ -2358,7 +2373,21 @@ def admin():
                         inserted = 0
                         updated = 0
                         skipped = 0
+                        replaced_count = 0
                         if upload_mode == "replace":
+                            replaced_count = conn.execute(
+                                "SELECT COUNT(*) FROM products"
+                            ).fetchone()[0]
+                            log_audit(
+                                conn,
+                                "catalogue_replace_delete",
+                                "products",
+                                {
+                                    "products_deleted": replaced_count,
+                                    "note": "Full catalogue replace - all products not in the "
+                                    "uploaded file were removed.",
+                                },
+                            )
                             conn.execute("DELETE FROM products")
                         for row in rows:
                             sku = row.get("sku", "").strip()

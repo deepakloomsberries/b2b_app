@@ -201,7 +201,7 @@
     window.appSettings = {{ catalog_settings | tojson }};
 </script>
 
-<script src="{{ url_for('static', filename='js/catalog.js') }}"></script>
+<script src="{{ static_url('js/catalog.js') }}"></script>
 <script>
     const focusToggle = document.getElementById('toggle-focus');
     const focusKey = 'catalogFocusMode';

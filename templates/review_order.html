@@ -20,6 +20,16 @@
 {% endif %}
 
 <p class="cart-note">All prices are exclusive of VAT.</p>
+{% if not can_edit_price %}
+    <p class="cart-note">
+        Prices are fixed for your account.
+        {% if session.get('user', {}).get('role') == 'admin' %}
+            Set a "Salesman Discount Floor %" below 100 in Admin → Settings to allow discounting at order time.
+        {% else %}
+            Ask an admin to enable order-time discounting if you need it.
+        {% endif %}
+    </p>
+{% endif %}
 
 <form method="post" action="{{ url_for('place_order') }}" id="review-form">
     {% include "_csrf_field.html" %}
