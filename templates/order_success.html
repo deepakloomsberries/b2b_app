@@ -8,6 +8,13 @@
     {% if export_warning %}
         <div class="warning-banner">Warning: {{ export_warning }} The order was saved locally.</div>
     {% endif %}
+    {% if subtotal is defined %}
+        <div class="cart-totals">
+            <div class="cart-line"><span>Sub Total</span><span>{{ currency_symbol }} {{ '%.2f'|format(subtotal) }}</span></div>
+            <div class="cart-line"><span>VAT ({{ (vat_rate * 100)|round(1) }}%)</span><span>{{ currency_symbol }} {{ '%.2f'|format(vat_amount) }}</span></div>
+            <div class="cart-line total"><span>Total</span><span>{{ currency_symbol }} {{ '%.2f'|format(total_amount) }}</span></div>
+        </div>
+    {% endif %}
     <div class="share-actions">
         <a class="button" href="{{ url_for('home') }}">New Order</a>
         <a class="button secondary" target="_blank" rel="noopener" href="https://wa.me/?text=Order%20{{ order_number }}%20confirmed%20from%20B2B%20Order%20App">WhatsApp</a>

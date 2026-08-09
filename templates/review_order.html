@@ -19,7 +19,7 @@
     </div>
 {% endif %}
 
-<p class="cart-note">All prices are exclusive of taxes.</p>
+<p class="cart-note">All prices are exclusive of VAT.</p>
 
 <form method="post" action="{{ url_for('place_order') }}" id="review-form">
     {% include "_csrf_field.html" %}
@@ -28,7 +28,8 @@
 
     <div class="cart-list">
         {% for item in items %}
-            <div class="cart-item" data-sku="{{ item.sku }}" data-qty="{{ item.qty }}" data-price="{{ item.price_base }}">
+            <div class="cart-item" data-sku="{{ item.sku }}" data-qty="{{ item.qty }}"
+                 data-price="{{ item.price_base }}" data-floor="{{ item.price_floor }}" data-max="{{ item.price_base }}">
                 <button type="button" class="cart-remove" aria-label="Remove item">×</button>
                 <div class="cart-image">
                     {% if item.image_url %}
@@ -40,10 +41,17 @@
                 <div class="cart-body">
                     <div class="cart-title">{{ item.title }}</div>
                     <div class="cart-meta">ID: {{ item.sku }}</div>
-                    <div class="cart-meta">Unit: item</div>
-                    <div class="cart-meta">MOQ: 0</div>
-                    <div class="cart-price">{{ currency_symbol }} {{ '%.2f'|format(item.price_base) }}</div>
-                    <div class="cart-meta">Balance Stock: -</div>
+                    {% if can_edit_price %}
+                        <label class="cart-price-edit">
+                            Unit price ({{ currency_symbol }})
+                            <input type="number" class="price-input" step="0.01"
+                                   min="{{ item.price_floor }}" max="{{ item.price_base }}"
+                                   value="{{ '%.2f'|format(item.price_base) }}">
+                        </label>
+                        <div class="cart-meta price-range-hint">Allowed: {{ currency_symbol }} {{ '%.2f'|format(item.price_floor) }} – {{ '%.2f'|format(item.price_base) }}</div>
+                    {% else %}
+                        <div class="cart-price">{{ currency_symbol }} {{ '%.2f'|format(item.price_base) }}</div>
+                    {% endif %}
                     <div class="qty-control cart-qty">
                         <button type="button" class="qty-btn" data-action="minus">-</button>
                         <input type="number" min="0" value="{{ item.qty }}" class="qty-input">
@@ -56,28 +64,30 @@
 
     <div class="cart-totals">
         <div class="cart-line"><span>Sub Total</span><span>{{ currency_symbol }} <span id="subtotal">0.00</span></span></div>
-        <div class="cart-line"><span>Tax</span><span>{{ currency_symbol }} <span id="tax">0.00</span></span></div>
-        <div class="cart-line"><span>Shipping Cost</span><span>{{ currency_symbol }} <span id="shipping">0.00</span></span></div>
-        <div class="cart-line total"><span>Grand Total</span><span>{{ currency_symbol }} <span id="total">0.00</span></span></div>
+        <div class="cart-line"><span>VAT ({{ (vat_rate * 100)|round(1) }}%)</span><span>{{ currency_symbol }} <span id="tax">0.00</span></span></div>
+        <div class="cart-line total"><span>Total</span><span>{{ currency_symbol }} <span id="total">0.00</span></span></div>
     </div>
     <label class="cart-remark">
         Order Remarks
         <textarea name="order_remarks" rows="3" placeholder="Add any notes for this order"></textarea>
     </label>
-    <button type="submit" id="confirm-order" class="button primary wide" disabled>Place Order</button>
+    <div class="cart-action-row">
+        <button type="submit" formaction="{{ url_for('quotation') }}" formtarget="_blank" id="download-quotation" class="button secondary wide">Download Quotation</button>
+        <button type="submit" id="confirm-order" class="button primary wide" disabled>Place Order</button>
+    </div>
 </form>
 
 <script>
     const items = Array.from(document.querySelectorAll('.cart-item'));
     const subtotalEl = document.getElementById('subtotal');
     const taxEl = document.getElementById('tax');
-    const shippingEl = document.getElementById('shipping');
     const totalEl = document.getElementById('total');
     const itemsJsonInput = document.getElementById('items-json');
     const confirmBtn = document.getElementById('confirm-order');
+    const quotationBtn = document.getElementById('download-quotation');
     const reviewForm = document.getElementById('review-form');
     const backItemsInput = document.getElementById('back-items-json');
-    const TAX_RATE = 0.15;
+    const VAT_RATE = {{ vat_rate }};
     const customerId = '{{ customer.id }}';
     const cartStorageKey = customerId ? `sales_cart_${customerId}` : null;
 
@@ -91,28 +101,31 @@
     const buildPayload = () => {
         const payload = items
             .filter((item) => item.dataset.removed !== 'true')
-            .map((item) => ({
-                sku: item.dataset.sku,
-                qty: parseInt(item.dataset.qty, 10),
-            }))
+            .map((item) => {
+                const priceInput = item.querySelector('.price-input');
+                return {
+                    sku: item.dataset.sku,
+                    qty: parseInt(item.dataset.qty, 10),
+                    unit_price: priceInput ? parseFloat(priceInput.value) : parseFloat(item.dataset.price),
+                };
+            })
             .filter((item) => item.qty > 0);
         itemsJsonInput.value = JSON.stringify(payload);
         if (backItemsInput) {
-            backItemsInput.value = itemsJsonInput.value;
+            backItemsInput.value = JSON.stringify(payload.map(({ sku, qty }) => ({ sku, qty })));
         }
         syncCartStorage(payload);
 
-        const subtotal = payload.reduce((sum, item) => {
-            const row = items.find((entry) => entry.dataset.sku === item.sku);
-            const price = row ? parseFloat(row.dataset.price) : 0;
-            return sum + price * item.qty;
-        }, 0);
+        const subtotal = payload.reduce((sum, item) => sum + (item.unit_price || 0) * item.qty, 0);
         subtotalEl.textContent = subtotal.toFixed(2);
-        const tax = subtotal * TAX_RATE;
+        const tax = subtotal * VAT_RATE;
         taxEl.textContent = tax.toFixed(2);
-        shippingEl.textContent = '0.00';
         totalEl.textContent = (subtotal + tax).toFixed(2);
-        confirmBtn.disabled = payload.length === 0;
+        const isEmpty = payload.length === 0;
+        confirmBtn.disabled = isEmpty;
+        if (quotationBtn) {
+            quotationBtn.disabled = isEmpty;
+        }
     };
 
     items.forEach((item) => {
@@ -138,14 +151,29 @@
             item.dataset.qty = input.value;
             buildPayload();
         });
+        const priceInput = item.querySelector('.price-input');
+        priceInput?.addEventListener('change', () => {
+            const floor = parseFloat(item.dataset.floor);
+            const max = parseFloat(item.dataset.max);
+            let value = parseFloat(priceInput.value);
+            if (Number.isNaN(value)) {
+                value = max;
+            }
+            value = Math.min(max, Math.max(floor, value));
+            priceInput.value = value.toFixed(2);
+            buildPayload();
+        });
     });
 
     buildPayload();
 
 
-    reviewForm?.addEventListener('submit', () => {
-        confirmBtn.disabled = true;
-        confirmBtn.textContent = 'Submitting...';
+    reviewForm?.addEventListener('submit', (event) => {
+        const submitter = event.submitter;
+        if (submitter && submitter.id === 'confirm-order') {
+            confirmBtn.disabled = true;
+            confirmBtn.textContent = 'Submitting...';
+        }
     });
 </script>
 {% endblock %}

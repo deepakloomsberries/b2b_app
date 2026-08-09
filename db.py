@@ -163,6 +163,15 @@ def init_db(db_path=None):
         locked_until TEXT,
         last_attempt_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS salesman_prices (
+        user_id INTEGER NOT NULL,
+        sku TEXT NOT NULL,
+        price REAL NOT NULL,
+        updated_at TEXT,
+        PRIMARY KEY (user_id, sku),
+        FOREIGN KEY(user_id) REFERENCES users(id),
+        FOREIGN KEY(sku) REFERENCES products(sku)
+    );
     """
     with get_db(db_path) as conn:
         conn.executescript(schema)
@@ -202,6 +211,8 @@ def init_db(db_path=None):
             ("low_stock_threshold", "5"),
             ("currency_symbol", "SAR"),
             ("credit_limit", "0"),
+            ("min_price_percent", "100"),
+            ("vat_rate", "15"),
         ]
         for key, value in default_settings:
             conn.execute(

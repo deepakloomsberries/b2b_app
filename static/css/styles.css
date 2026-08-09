@@ -1076,6 +1076,38 @@ body {
     color: #111827;
 }
 
+.cart-price-edit {
+    display: grid;
+    gap: 4px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #374151;
+}
+
+.cart-price-edit .price-input {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    font-weight: 700;
+    color: #d44f4f;
+    width: 120px;
+}
+
+.price-range-hint {
+    color: #9ca3af;
+}
+
+.cart-action-row {
+    display: grid;
+    gap: 10px;
+}
+
+@media (min-width: 480px) {
+    .cart-action-row {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
 .orders-list {
     display: grid;
     gap: 12px;
@@ -2053,6 +2085,24 @@ select {
 
 .inline-form {
     margin-top: 8px;
+}
+
+.pricing-row {
+    flex-wrap: wrap;
+}
+
+.pricing-form {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 0;
+}
+
+.pricing-form input[type="number"] {
+    width: 120px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
 }
 
 .qty-control {

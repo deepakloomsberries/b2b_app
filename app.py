@@ -259,6 +259,45 @@ def sanitize_csv_cell(value):
     return text
 
 
+def get_salesman_price_overrides(conn, user_id):
+    """Return {sku: price} of this salesman's custom prices, or {} if none."""
+    if not user_id:
+        return {}
+    rows = conn.execute(
+        "SELECT sku, price FROM salesman_prices WHERE user_id = ?", (user_id,)
+    ).fetchall()
+    return {row["sku"]: row["price"] for row in rows}
+
+
+def resolve_product_base_price(sku, product_row, overrides):
+    """Effective unit price for this salesman: their override if set, else the
+    product's standard price (price, falling back to price_credit)."""
+    if sku in overrides:
+        return overrides[sku]
+    return (
+        product_row["price"]
+        if product_row["price"] is not None
+        else product_row["price_credit"]
+    )
+
+
+def get_min_price_percent():
+    try:
+        value = float(get_setting("min_price_percent", "100"))
+    except (TypeError, ValueError):
+        value = 100.0
+    return max(0.0, min(100.0, value))
+
+
+def get_vat_rate():
+    """VAT rate as a decimal fraction (e.g. 0.15), from the vat_rate setting (percent)."""
+    try:
+        value = float(get_setting("vat_rate", "15"))
+    except (TypeError, ValueError):
+        value = 15.0
+    return max(0.0, value) / 100.0
+
+
 def get_credit_warning(customer):
     """Return a warning dict if the customer's outstanding balance exceeds the
     configured credit limit, or None if the limit is disabled (0) or not exceeded."""
@@ -299,7 +338,7 @@ def format_date(value):
 
 
 def has_recent_duplicate_order(conn, customer_id, submitter_name, valid_items, cutoff_iso):
-    item_totals = {sku: qty for sku, qty, _ in valid_items}
+    item_totals = {sku: qty for sku, qty, *_ in valid_items}
     if not item_totals:
         return None
     candidates = conn.execute(
@@ -693,6 +732,7 @@ def login():
             if user and verify_password(conn, user, password):
                 clear_login_attempts(conn, identifier)
                 session["user"] = {
+                    "id": user["id"],
                     "name": user["name"],
                     "role": normalize_user_role(user["role"]),
                 }
@@ -920,12 +960,25 @@ def catalog(customer_id):
         subcategory_images = cached["subcategory_images"]
         sub_subcategory_map = cached["sub_subcategory_map"]
         sub_subcategory_images = cached["sub_subcategory_images"]
+        salesman_id = session.get("user", {}).get("id")
+        price_overrides = get_salesman_price_overrides(conn, salesman_id)
         products_json = []
         for product in products:
             product_data = dict(product)
+            sku = product_data.get("sku")
+            price = product_data.get("price")
+            price_credit = product_data.get("price_credit")
+            price_cash = product_data.get("price_cash")
+            override_price = price_overrides.get(sku)
+            has_override = override_price is not None
+            if has_override:
+                price = override_price
+                price_credit = override_price
+                if price_cash is not None and price_cash > override_price:
+                    price_cash = override_price
             products_json.append(
                 {
-                    "sku": product_data.get("sku"),
+                    "sku": sku,
                     "title": product_data.get("title"),
                     "category": product_data.get("category"),
                     "subcategory": product_data.get("subcategory"),
@@ -935,9 +988,10 @@ def catalog(customer_id):
                     "image_url_3": product_data.get("image_url_3"),
                     "image_url_4": product_data.get("image_url_4"),
                     "image_url": product_data.get("image_url"),
-                    "price": product_data.get("price"),
-                    "price_cash": product_data.get("price_cash"),
-                    "price_credit": product_data.get("price_credit"),
+                    "price": price,
+                    "price_cash": price_cash,
+                    "price_credit": price_credit,
+                    "has_override": has_override,
                     "reserved_qty": product_data.get("reserved_qty"),
                     "available_qty": product_data.get("available_qty"),
                     "stock_qty": product_data.get("stock_qty"),
@@ -1033,6 +1087,8 @@ def place_order():
         return redirect(url_for("home"))
 
     submitter_name = session.get("user", {}).get("name", "Unknown")
+    salesman_id = session.get("user", {}).get("id")
+    min_price_percent = get_min_price_percent()
 
     with get_db() as conn:
         customer = conn.execute(
@@ -1049,7 +1105,9 @@ def place_order():
             if reservation_on
             else "COALESCE(s.stock_qty, 0)"
         )
+        price_overrides = get_salesman_price_overrides(conn, salesman_id)
         insufficient = []
+        price_violations = []
         valid_items = []
         for item in items:
             sku = item.get("sku")
@@ -1072,11 +1130,27 @@ def place_order():
             if not allow_oversell and qty > available_qty:
                 insufficient.append(f"{sku} (available {available_qty})")
                 continue
-            valid_items.append((sku, qty, row))
+            base_price = resolve_product_base_price(sku, row, price_overrides)
+            price_floor = base_price * min_price_percent / 100
+            submitted_price = parse_float(item.get("unit_price"), default=base_price)
+            # Salesmen may discount down to the configured floor, never above
+            # the resolved (standard or salesman-override) price.
+            if submitted_price > base_price + 0.01 or submitted_price < price_floor - 0.01:
+                price_violations.append(
+                    f"{sku} (allowed {price_floor:.2f}-{base_price:.2f})"
+                )
+                continue
+            valid_items.append((sku, qty, row, round(submitted_price, 2)))
 
         if insufficient:
             flash(
                 "Not enough available stock for: " + ", ".join(insufficient),
+                "error",
+            )
+            return redirect(url_for("catalog", customer_id=customer_id))
+        if price_violations:
+            flash(
+                "Unit price outside the allowed range for: " + ", ".join(price_violations),
                 "error",
             )
             return redirect(url_for("catalog", customer_id=customer_id))
@@ -1116,18 +1190,13 @@ def place_order():
         order_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
 
         order_rows = []
-        for sku, qty, row in valid_items:
-            price_base = (
-                row["price"]
-                if row["price"] is not None
-                else row["price_credit"]
-            )
+        for sku, qty, row, unit_price in valid_items:
             conn.execute(
                 "INSERT INTO order_items (order_id, sku, title_snapshot, price_snapshot, qty) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (order_id, sku, row["title"], price_base, qty),
+                (order_id, sku, row["title"], unit_price, qty),
             )
-            order_rows.append({"sku": sku, "qty": qty, "price": price_base})
+            order_rows.append({"sku": sku, "qty": qty, "price": unit_price})
         adjust_reserved_stock(conn, order_id, 1)
         log_audit(
             conn,
@@ -1177,10 +1246,18 @@ def place_order():
                 )
                 conn.commit()
 
+    vat_rate = get_vat_rate()
+    subtotal = sum(row["price"] * row["qty"] for row in order_rows)
+    vat_amount = subtotal * vat_rate
     return render_template(
         "order_success.html",
         order_number=order_number,
         export_warning=export_warning,
+        currency_symbol=get_setting("currency_symbol", "SAR"),
+        subtotal=subtotal,
+        vat_rate=vat_rate,
+        vat_amount=vat_amount,
+        total_amount=subtotal + vat_amount,
     )
 
 
@@ -1197,6 +1274,8 @@ def review_order():
         flash("No items selected.", "error")
         return redirect(url_for("home"))
 
+    salesman_id = session.get("user", {}).get("id")
+    min_price_percent = get_min_price_percent()
     with get_db() as conn:
         customer = conn.execute(
             "SELECT * FROM customers WHERE id = ?", (customer_id,)
@@ -1205,6 +1284,7 @@ def review_order():
             flash("Customer not found.", "error")
             return redirect(url_for("home"))
 
+        price_overrides = get_salesman_price_overrides(conn, salesman_id)
         order_items = []
         for item in items:
             sku = item.get("sku")
@@ -1217,17 +1297,15 @@ def review_order():
             ).fetchone()
             if not product:
                 continue
-            price_base = (
-                product["price"]
-                if product["price"] is not None
-                else product["price_credit"]
-            )
+            price_base = resolve_product_base_price(sku, product, price_overrides)
+            price_floor = round(price_base * min_price_percent / 100, 2)
             order_items.append(
                 {
                     "sku": product["sku"],
                     "title": product["title"],
                     "price_cash": product["price_cash"],
                     "price_base": price_base,
+                    "price_floor": price_floor,
                     "qty": qty,
                     "image_url": product["image_url"]
                     or product["image_url_1"]
@@ -1247,6 +1325,8 @@ def review_order():
         credit_warning=get_credit_warning(customer),
         items=order_items,
         currency_symbol=get_setting("currency_symbol", "SAR"),
+        vat_rate=get_vat_rate(),
+        can_edit_price=min_price_percent < 100,
     )
 
 
@@ -1589,7 +1669,7 @@ def download_order(order_number):
 
 
 def export_orders(order_numbers, as_pdf=False):
-    vat_rate = 0.15
+    vat_rate = get_vat_rate()
     with get_db() as conn:
         placeholders = ",".join("?" for _ in order_numbers)
         orders = conn.execute(
@@ -1830,6 +1910,257 @@ def export_orders(order_numbers, as_pdf=False):
         output.getvalue(),
         mimetype="text/csv",
         headers={"Content-Disposition": "attachment; filename=orders.csv"},
+    )
+
+
+def build_quotation_pdf(customer, quote_items, quote_ref, vat_rate, currency_symbol):
+    """Build a shareable quotation PDF (with item images) from cart items that
+    have not yet been committed as an order."""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=36,
+        rightMargin=36,
+        topMargin=36,
+        bottomMargin=36,
+    )
+    styles = getSampleStyleSheet()
+    title_style = styles["Title"]
+    title_style.fontSize = 18
+    title_style.leading = 22
+    normal_style = styles["BodyText"]
+    normal_style.leading = 14
+    small_style = styles["BodyText"].clone("SmallBody")
+    small_style.fontSize = 9
+    small_style.leading = 11
+
+    def format_customer_details(customer_row):
+        lines = [customer_row["name"]]
+        address_parts = [
+            customer_row["address"],
+            customer_row["city"],
+            customer_row["state"],
+            customer_row["country"],
+        ]
+        address = ", ".join([part for part in address_parts if part])
+        if address:
+            lines.append(address)
+        if customer_row["phone"]:
+            lines.append(f"Phone: {customer_row['phone']}")
+        return "<br/>".join(lines)
+
+    def image_cell(url, allow_images=True):
+        if not allow_images or not url:
+            return Paragraph("—", styles["BodyText"])
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:
+                data = response.read()
+            img = Image(io.BytesIO(data))
+            img.drawWidth = 0.5 * inch
+            img.drawHeight = 0.5 * inch
+            return img
+        except Exception:
+            return Paragraph("—", styles["BodyText"])
+
+    today = datetime.utcnow()
+    valid_until = (today + timedelta(days=14)).strftime("%d %b %Y")
+
+    story = [Paragraph("Quotation", title_style), Spacer(1, 10)]
+
+    header_table = Table(
+        [
+            [
+                Paragraph("<b>Quotation Ref</b>", normal_style),
+                Paragraph(quote_ref, normal_style),
+                Paragraph("<b>Date</b>", normal_style),
+                Paragraph(today.strftime("%d %b %Y"), normal_style),
+            ],
+            [
+                Paragraph("<b>Customer</b>", normal_style),
+                Paragraph(format_customer_details(customer), normal_style),
+                Paragraph("<b>Valid Until</b>", normal_style),
+                Paragraph(valid_until, normal_style),
+            ],
+        ],
+        colWidths=[1.1 * inch, 3.3 * inch, 1.1 * inch, 1.8 * inch],
+    )
+    header_table.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+                ("TOPPADDING", (0, 0), (-1, -1), 6),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.5, colors.grey),
+            ]
+        )
+    )
+    story.append(header_table)
+    story.append(Spacer(1, 12))
+
+    allow_images = len(quote_items) <= 15
+    item_rows = [
+        [
+            Paragraph("<b>Image</b>", small_style),
+            Paragraph("<b>Item Code</b>", small_style),
+            Paragraph("<b>Description</b>", small_style),
+            Paragraph("<b>Qty</b>", small_style),
+            Paragraph("<b>Unit Price</b>", small_style),
+            Paragraph("<b>Line Total</b>", small_style),
+        ]
+    ]
+
+    subtotal = 0.0
+    for item in quote_items:
+        line_total = float(item["qty"]) * float(item["unit_price"])
+        subtotal += line_total
+        item_rows.append(
+            [
+                image_cell(item["image_url"], allow_images),
+                Paragraph(item["sku"], small_style),
+                Paragraph(item["title"], small_style),
+                Paragraph(str(item["qty"]), small_style),
+                Paragraph(f"{currency_symbol} {item['unit_price']:.2f}", small_style),
+                Paragraph(f"{currency_symbol} {line_total:.2f}", small_style),
+            ]
+        )
+
+    items_table = Table(
+        item_rows,
+        colWidths=[0.8 * inch, 1.2 * inch, 2.2 * inch, 0.7 * inch, 1.1 * inch, 1.1 * inch],
+    )
+    items_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#eef2f7")),
+                ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                ("ALIGN", (3, 1), (-1, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(items_table)
+    story.append(Spacer(1, 12))
+
+    vat_amount = subtotal * vat_rate
+    total_amount = subtotal + vat_amount
+    totals_table = Table(
+        [
+            ["Subtotal (Excl. VAT)", f"{currency_symbol} {subtotal:.2f}"],
+            [f"VAT ({vat_rate * 100:.0f}%)", f"{currency_symbol} {vat_amount:.2f}"],
+            ["Total (Incl. VAT)", f"{currency_symbol} {total_amount:.2f}"],
+        ],
+        colWidths=[1.6 * inch, 1.4 * inch],
+        hAlign="RIGHT",
+    )
+    totals_table.setStyle(
+        TableStyle(
+            [
+                ("ALIGN", (1, 0), (-1, -1), "RIGHT"),
+                ("TEXTCOLOR", (0, 0), (-1, -1), colors.HexColor("#0f172a")),
+                ("FONTNAME", (0, 2), (-1, 2), "Helvetica-Bold"),
+                ("LINEBELOW", (0, 0), (-1, 1), 0.5, colors.grey),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(totals_table)
+    story.append(Spacer(1, 14))
+    story.append(
+        Paragraph(
+            "This is a price quotation, not a tax invoice or order confirmation. "
+            "Prices are subject to stock availability at the time of ordering.",
+            small_style,
+        )
+    )
+
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
+
+
+@app.route("/quotation", methods=["POST"])
+def quotation():
+    customer_id = request.form.get("customer_id")
+    items_json = request.form.get("items_json", "[]")
+    try:
+        items = json.loads(items_json)
+    except json.JSONDecodeError:
+        items = []
+
+    if not customer_id or not items:
+        flash("No items to quote.", "error")
+        return redirect(url_for("home"))
+
+    salesman_id = session.get("user", {}).get("id")
+    min_price_percent = get_min_price_percent()
+    with get_db() as conn:
+        customer = conn.execute(
+            "SELECT * FROM customers WHERE id = ?", (customer_id,)
+        ).fetchone()
+        if not customer:
+            flash("Customer not found.", "error")
+            return redirect(url_for("home"))
+
+        price_overrides = get_salesman_price_overrides(conn, salesman_id)
+        quote_items = []
+        for item in items:
+            sku = item.get("sku")
+            qty = int(item.get("qty", 0))
+            if qty <= 0 or not sku:
+                continue
+            product = conn.execute(
+                "SELECT sku, title, price, price_credit, image_url, image_url_1, "
+                "image_url_2, image_url_3, image_url_4 FROM products WHERE sku = ?",
+                (sku,),
+            ).fetchone()
+            if not product:
+                continue
+            base_price = resolve_product_base_price(sku, product, price_overrides)
+            price_floor = base_price * min_price_percent / 100
+            unit_price = parse_float(item.get("unit_price"), default=base_price)
+            unit_price = min(base_price, max(price_floor, unit_price))
+            quote_items.append(
+                {
+                    "sku": sku,
+                    "title": product["title"],
+                    "qty": qty,
+                    "unit_price": round(unit_price, 2),
+                    "image_url": product["image_url"]
+                    or product["image_url_1"]
+                    or product["image_url_2"]
+                    or product["image_url_3"]
+                    or product["image_url_4"],
+                }
+            )
+
+        if not quote_items:
+            flash("No valid items to quote.", "error")
+            return redirect(url_for("catalog", customer_id=customer_id))
+
+        quote_ref = f"QUO-{datetime.utcnow().strftime('%Y%m%d-%H%M%S')}"
+        log_audit(
+            conn,
+            "quotation_generated",
+            "quotations",
+            {"customer_id": customer_id, "item_count": len(quote_items), "quote_ref": quote_ref},
+        )
+        conn.commit()
+
+    pdf_bytes = build_quotation_pdf(
+        customer,
+        quote_items,
+        quote_ref,
+        get_vat_rate(),
+        get_setting("currency_symbol", "SAR"),
+    )
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={quote_ref}.pdf"},
     )
 
 
@@ -2562,6 +2893,8 @@ def admin():
             except ValueError:
                 low_stock_threshold = 5
             credit_limit = max(0.0, parse_float(request.form.get("credit_limit", "0")))
+            min_price_percent = max(0.0, min(100.0, parse_float(request.form.get("min_price_percent", "100"), default=100.0)))
+            vat_rate_percent = max(0.0, parse_float(request.form.get("vat_rate", "15"), default=15.0))
             with get_db() as conn:
                 for key, val in [
                     ("reservation_mode", reservation_mode),
@@ -2570,6 +2903,8 @@ def admin():
                     ("currency_symbol", currency_symbol[:10]),
                     ("low_stock_threshold", str(low_stock_threshold)),
                     ("credit_limit", str(credit_limit)),
+                    ("min_price_percent", str(min_price_percent)),
+                    ("vat_rate", str(vat_rate_percent)),
                 ]:
                     conn.execute(
                         "INSERT INTO settings (key, value) VALUES (?, ?) "
@@ -2583,9 +2918,49 @@ def admin():
                     "currency_symbol": currency_symbol,
                     "low_stock_threshold": low_stock_threshold,
                     "credit_limit": credit_limit,
+                    "min_price_percent": min_price_percent,
+                    "vat_rate": vat_rate_percent,
                 })
                 conn.commit()
             message = "Settings saved."
+        elif action == "set_salesman_price":
+            user_id = parse_int(request.form.get("pricing_user_id"))
+            sku = request.form.get("pricing_sku", "").strip()
+            price = parse_float(request.form.get("pricing_price"), default=None)
+            if not user_id or not sku or price is None or price < 0:
+                warning = "Salesman, SKU, and a valid price are required."
+            else:
+                with get_db() as conn:
+                    conn.execute(
+                        "INSERT INTO salesman_prices (user_id, sku, price, updated_at) VALUES (?, ?, ?, ?) "
+                        "ON CONFLICT(user_id, sku) DO UPDATE SET price = excluded.price, updated_at = excluded.updated_at",
+                        (user_id, sku, price, now_iso()),
+                    )
+                    log_audit(
+                        conn,
+                        "salesman_price_set",
+                        "salesman_prices",
+                        {"user_id": user_id, "sku": sku, "price": price},
+                    )
+                    conn.commit()
+                message = "Salesman price saved."
+        elif action == "clear_salesman_price":
+            user_id = parse_int(request.form.get("pricing_user_id"))
+            sku = request.form.get("pricing_sku", "").strip()
+            if user_id and sku:
+                with get_db() as conn:
+                    conn.execute(
+                        "DELETE FROM salesman_prices WHERE user_id = ? AND sku = ?",
+                        (user_id, sku),
+                    )
+                    log_audit(
+                        conn,
+                        "salesman_price_cleared",
+                        "salesman_prices",
+                        {"user_id": user_id, "sku": sku},
+                    )
+                    conn.commit()
+                message = "Salesman price override removed."
         elif action == "toggle_product_visibility":
             sku = request.form.get("sku", "").strip()
             is_active = request.form.get("is_active", "0")
@@ -2625,6 +3000,20 @@ def admin():
         product_page_value = 1
     product_offset = (product_page_value - 1) * product_limit_value
 
+    pricing_salesman_id = parse_int(request.args.get("salesman_id"))
+    pricing_query = request.args.get("psq", "").strip()
+    pricing_limit = request.args.get("pslimit", "25").strip()
+    pricing_page = request.args.get("pspage", "1").strip()
+    try:
+        pricing_limit_value = min(max(int(pricing_limit), 10), 100)
+    except ValueError:
+        pricing_limit_value = 25
+    try:
+        pricing_page_value = max(int(pricing_page), 1)
+    except ValueError:
+        pricing_page_value = 1
+    pricing_offset = (pricing_page_value - 1) * pricing_limit_value
+
     with get_db() as conn:
         categories = conn.execute("SELECT name, image_url FROM categories ORDER BY name").fetchall()
         subcategories = conn.execute(
@@ -2639,6 +3028,31 @@ def admin():
             "FROM customers ORDER BY name"
         ).fetchall()
         users = conn.execute("SELECT * FROM users ORDER BY created_at DESC").fetchall()
+        salesmen = conn.execute("SELECT id, name, role FROM users ORDER BY name").fetchall()
+        if not pricing_salesman_id and salesmen:
+            pricing_salesman_id = salesmen[0]["id"]
+
+        pricing_where = "WHERE p.title LIKE ? OR p.sku LIKE ?" if pricing_query else ""
+        pricing_params = [f"%{pricing_query}%", f"%{pricing_query}%"] if pricing_query else []
+        pricing_total = conn.execute(
+            f"SELECT COUNT(*) AS total FROM products p {pricing_where}",
+            pricing_params,
+        ).fetchone()["total"]
+        pricing_products = conn.execute(
+            "SELECT p.sku, p.title, p.price, p.price_credit, sp.price AS override_price "
+            "FROM products p "
+            "LEFT JOIN salesman_prices sp ON sp.sku = p.sku AND sp.user_id = ? "
+            f"{pricing_where} "
+            "ORDER BY p.title LIMIT ? OFFSET ?",
+            (pricing_salesman_id, *pricing_params, pricing_limit_value, pricing_offset),
+        ).fetchall()
+        pricing_override_count = 0
+        if pricing_salesman_id:
+            pricing_override_count = conn.execute(
+                "SELECT COUNT(*) AS total FROM salesman_prices WHERE user_id = ?",
+                (pricing_salesman_id,),
+            ).fetchone()["total"]
+
         product_params = []
         product_where = ""
         if product_query:
@@ -2743,6 +3157,8 @@ def admin():
         "currency_symbol": get_setting("currency_symbol", "SAR"),
         "low_stock_threshold": int(get_setting("low_stock_threshold", "5") or 5),
         "credit_limit": parse_float(get_setting("credit_limit", "0")),
+        "min_price_percent": get_min_price_percent(),
+        "vat_rate": parse_float(get_setting("vat_rate", "15")),
     }
     return render_template(
         "admin.html",
@@ -2766,6 +3182,15 @@ def admin():
         customer_health=customer_health[:8],
         audit_logs=audit_logs,
         admin_notifications=admin_notifications,
+        salesmen=salesmen,
+        pricing_salesman_id=pricing_salesman_id,
+        pricing_products=pricing_products,
+        pricing_query=pricing_query,
+        pricing_limit=pricing_limit_value,
+        pricing_page=pricing_page_value,
+        pricing_total=pricing_total,
+        pricing_has_more=pricing_total > (pricing_offset + pricing_limit_value),
+        pricing_override_count=pricing_override_count,
     )
 
 
