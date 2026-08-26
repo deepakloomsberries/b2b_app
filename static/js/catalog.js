@@ -337,7 +337,6 @@ const createProductCard = (product) => {
     ].filter(Boolean);
     const stockQty = parseInt(product.available_qty || 0, 10);
     const reservedQty = parseInt(product.reserved_qty || 0, 10);
-    const totalStock = parseInt(product.stock_qty || 0, 10);
     const stockClass =
         stockQty <= 0 ? 'out-stock' : stockQty <= LOW_STOCK_THRESHOLD ? 'low-stock' : 'in-stock';
     const priceBase = product.price ?? product.price_credit ?? 0;
@@ -362,6 +361,18 @@ const createProductCard = (product) => {
     card.dataset.stock = stockQty;
     card.dataset.reserved = reservedQty;
     card.dataset.sequence = product.sort_order || '';
+    const showCashPrice =
+        priceCash !== null &&
+        priceCash !== undefined &&
+        Math.abs(parseFloat(priceCash) - parseFloat(priceBase || 0)) >= 0.005;
+    const stockLineParts = [];
+    if (SHOW_STOCK) {
+        stockLineParts.push(`${stockQty} available`);
+        if (reservedQty > 0) {
+            stockLineParts.push(`${reservedQty} reserved`);
+        }
+    }
+
     card.innerHTML = `
         <div class="product-image">
             ${
@@ -369,38 +380,28 @@ const createProductCard = (product) => {
                     ? `
                         <img src="${safeImages[0]}" alt="${safeTitle}" loading="lazy" decoding="async" width="160" height="160">
                     `
-                    : '<div class="placeholder">No Image</div>'
+                    : '<div class="placeholder"><span aria-hidden="true">📦</span></div>'
             }
         </div>
         <div class="product-info">
-            <div class="product-title">${safeTitle}</div>
-            <div class="product-meta">
-                <span class="barcode">ID: ${safeSku}</span>
+            <div class="product-title-row">
+                <div class="product-title">${safeTitle}</div>
                 ${SHOW_STOCK ? `<span class="stock-badge ${stockClass}">
                     ${
                         stockQty <= 0
-                            ? 'Out of stock!!'
+                            ? 'Out of stock'
                             : stockQty <= LOW_STOCK_THRESHOLD
                               ? 'Low stock'
                               : 'In stock'
                     }
                 </span>` : ''}
             </div>
-            <div class="product-meta price-stack">
-                <span class="price">Price: ${CURRENCY} ${parseFloat(priceBase || 0).toFixed(2)}</span>
-                <span class="price secondary">Cash: ${CURRENCY} ${parseFloat(priceCash || 0).toFixed(2)}</span>
-                <span class="price secondary">(Excl. of taxes)</span>
+            <div class="product-sku">SKU ${safeSku}${safeMfr && safeMfr !== '—' ? ` &middot; MFR ${safeMfr}` : ''}</div>
+            <div class="product-price-row">
+                <span class="product-price-main">${CURRENCY} ${parseFloat(priceBase || 0).toFixed(2)}</span>
+                ${showCashPrice ? `<span class="product-price-alt">Cash ${CURRENCY} ${parseFloat(priceCash || 0).toFixed(2)}</span>` : ''}
             </div>
-            <div class="product-meta">
-                <span class="barcode">MFR no.: ${safeMfr}</span>
-            </div>
-            ${SHOW_STOCK ? `<div class="product-meta">
-                <span class="barcode">Available Stock: ${stockQty}</span>
-                <span class="barcode">Reserved: ${reservedQty}</span>
-            </div>
-            <div class="product-meta">
-                <span class="barcode">Total Stock: ${totalStock}</span>
-            </div>` : ''}
+            ${stockLineParts.length ? `<div class="product-stock-line">${stockLineParts.join(' &middot; ')}</div>` : ''}
             <div class="product-actions">
                 <button type="button" class="add-to-cart" ${
                     stockQty <= 0 ? 'disabled' : ''
@@ -801,7 +802,7 @@ const buildImageGallery = (images = []) => {
     if (!limitedImages.length) {
         const placeholder = document.createElement('div');
         placeholder.className = 'placeholder';
-        placeholder.textContent = 'No Image';
+        placeholder.innerHTML = '<span aria-hidden="true">📦</span>';
         main.appendChild(placeholder);
         pdpImages.appendChild(main);
         return;
@@ -844,9 +845,12 @@ const openPdp = (card) => {
     pdpTitle.textContent = title || 'Product';
     const basePrice = parseFloat(card.dataset.priceBase || '0').toFixed(2);
     const cashPrice = parseFloat(card.dataset.priceCash || '0').toFixed(2);
-    pdpPrice.textContent = `Price: ${CURRENCY} ${basePrice} • Cash: ${CURRENCY} ${cashPrice}`;
-    pdpSku.textContent = `ID: ${card.dataset.sku}`;
-    pdpStock.textContent = SHOW_STOCK ? `Balance Stock: ${stockQty}` : '';
+    pdpPrice.textContent =
+        basePrice !== cashPrice
+            ? `${CURRENCY} ${basePrice} (Cash ${CURRENCY} ${cashPrice})`
+            : `${CURRENCY} ${basePrice}`;
+    pdpSku.textContent = `SKU ${card.dataset.sku}`;
+    pdpStock.textContent = SHOW_STOCK ? `${stockQty} available` : '';
     pdpStockStatus.textContent = !SHOW_STOCK ? '' :
         stockQty <= 0 ? 'Out of Stock!!' : stockQty <= LOW_STOCK_THRESHOLD ? 'Low Stock' : '';
     buildImageGallery(images);
@@ -1114,15 +1118,18 @@ function renderSearchResults(term) {
         const item = document.createElement('div');
         item.className = 'search-card';
         const image = card.dataset.image;
+        const searchBasePrice = parseFloat(card.dataset.priceBase || '0').toFixed(2);
+        const searchCashPrice = parseFloat(card.dataset.priceCash || '0').toFixed(2);
         item.innerHTML = `
             <div class="search-thumb">
-                ${image ? `<img src="${image}" alt="${card.dataset.sku}">` : '<div class="placeholder">No Image</div>'}
+                ${image ? `<img src="${image}" alt="${card.dataset.sku}">` : '<div class="placeholder"><span aria-hidden="true">📦</span></div>'}
             </div>
             <div class="search-content">
                 <div class="search-title">${card.querySelector('.product-title')?.textContent || ''}</div>
-                <div class="search-meta">ID: ${card.dataset.sku}</div>
-                <div class="search-meta">Price: ${CURRENCY} ${parseFloat(card.dataset.priceBase || '0').toFixed(2)}</div>
-                <div class="search-meta">Cash: ${CURRENCY} ${parseFloat(card.dataset.priceCash || '0').toFixed(2)} <span class="muted">(Excl. of taxes)</span></div>
+                <div class="search-meta">SKU ${card.dataset.sku}</div>
+                <div class="search-meta">
+                    ${CURRENCY} ${searchBasePrice}${searchBasePrice !== searchCashPrice ? ` <span class="muted">(Cash ${CURRENCY} ${searchCashPrice})</span>` : ''}
+                </div>
                 <button type="button" class="add-to-cart">Add to Cart</button>
             </div>
         `;
