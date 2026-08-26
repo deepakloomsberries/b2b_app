@@ -66,6 +66,8 @@ const pdpImages = document.getElementById('pdp-images');
 const pdpTitle = document.getElementById('pdp-title');
 const pdpPrice = document.getElementById('pdp-price');
 const pdpSku = document.getElementById('pdp-sku');
+const pdpMfrRow = document.getElementById('pdp-mfr-row');
+const pdpMfr = document.getElementById('pdp-mfr');
 const pdpStock = document.getElementById('pdp-stock');
 const pdpStockStatus = document.getElementById('pdp-stock-status');
 const pdpAddBtn = document.getElementById('pdp-add');
@@ -385,7 +387,7 @@ const createProductCard = (product) => {
         </div>
         <div class="product-info">
             <div class="product-title-row">
-                <div class="product-title">${safeTitle}</div>
+                <div class="product-title" title="${safeTitle}">${safeTitle}</div>
                 ${SHOW_STOCK ? `<span class="stock-badge ${stockClass}">
                     ${
                         stockQty <= 0
@@ -396,7 +398,8 @@ const createProductCard = (product) => {
                     }
                 </span>` : ''}
             </div>
-            <div class="product-sku">SKU ${safeSku}${safeMfr && safeMfr !== '—' ? ` &middot; MFR ${safeMfr}` : ''}</div>
+            <div class="product-sku">SKU ${safeSku}</div>
+            ${safeMfr && safeMfr !== '—' ? `<div class="product-mfr">MFR ${safeMfr}</div>` : ''}
             <div class="product-price-row">
                 <span class="product-price-main">${CURRENCY} ${parseFloat(priceBase || 0).toFixed(2)}</span>
                 ${showCashPrice ? `<span class="product-price-alt">Cash ${CURRENCY} ${parseFloat(priceCash || 0).toFixed(2)}</span>` : ''}
@@ -850,6 +853,11 @@ const openPdp = (card) => {
             ? `${CURRENCY} ${basePrice} (Cash ${CURRENCY} ${cashPrice})`
             : `${CURRENCY} ${basePrice}`;
     pdpSku.textContent = `SKU ${card.dataset.sku}`;
+    const mfrText = card.querySelector('.product-mfr')?.textContent?.trim();
+    if (pdpMfrRow && pdpMfr) {
+        pdpMfrRow.hidden = !mfrText;
+        pdpMfr.textContent = mfrText || '';
+    }
     pdpStock.textContent = SHOW_STOCK ? `${stockQty} available` : '';
     pdpStockStatus.textContent = !SHOW_STOCK ? '' :
         stockQty <= 0 ? 'Out of Stock!!' : stockQty <= LOW_STOCK_THRESHOLD ? 'Low Stock' : '';

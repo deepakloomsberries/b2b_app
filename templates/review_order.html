@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block body_class %}mobile-ui{% endblock %}
+{% block body_class %}mobile-ui review-page{% endblock %}
 
 {% block content %}
 <header class="app-header with-back">
@@ -45,7 +45,7 @@
                     {% if item.image_url %}
                         <img src="{{ item.image_url }}" alt="{{ item.title }}">
                     {% else %}
-                        <div class="placeholder">No Image</div>
+                        <div class="placeholder"><span aria-hidden="true">📦</span></div>
                     {% endif %}
                 </div>
                 <div class="cart-body">
@@ -72,18 +72,20 @@
         {% endfor %}
     </div>
 
-    <div class="cart-totals">
-        <div class="cart-line"><span>Sub Total</span><span>{{ currency_symbol }} <span id="subtotal">0.00</span></span></div>
-        <div class="cart-line"><span>VAT ({{ (vat_rate * 100)|round(1) }}%)</span><span>{{ currency_symbol }} <span id="tax">0.00</span></span></div>
-        <div class="cart-line total"><span>Total</span><span>{{ currency_symbol }} <span id="total">0.00</span></span></div>
-    </div>
-    <label class="cart-remark">
-        Order Remarks
-        <textarea name="order_remarks" rows="3" placeholder="Add any notes for this order"></textarea>
-    </label>
-    <div class="cart-action-row">
-        <button type="submit" formaction="{{ url_for('quotation') }}" formtarget="_blank" id="download-quotation" class="button secondary wide">Download Quotation</button>
-        <button type="submit" id="confirm-order" class="button primary wide" disabled>Place Order</button>
+    <div class="cart-summary">
+        <div class="cart-totals">
+            <div class="cart-line"><span>Sub Total</span><span>{{ currency_symbol }} <span id="subtotal">0.00</span></span></div>
+            <div class="cart-line"><span>VAT ({{ (vat_rate * 100)|round(1) }}%)</span><span>{{ currency_symbol }} <span id="tax">0.00</span></span></div>
+            <div class="cart-line total"><span>Total</span><span>{{ currency_symbol }} <span id="total">0.00</span></span></div>
+        </div>
+        <label class="cart-remark">
+            Order Remarks
+            <textarea name="order_remarks" rows="3" placeholder="Add any notes for this order"></textarea>
+        </label>
+        <div class="cart-action-row">
+            <button type="submit" formaction="{{ url_for('quotation') }}" formtarget="_blank" id="download-quotation" class="button secondary wide">Download Quotation</button>
+            <button type="submit" id="confirm-order" class="button primary wide" disabled>Place Order</button>
+        </div>
     </div>
 </form>
 
