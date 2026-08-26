@@ -114,7 +114,7 @@
                     <span class="status-pill {{ order.order_status }}">{{ order.order_status }}</span>
                 </span>
                 <span class="cell">Not Paid</span>
-                <span class="cell">
+                <span class="cell assigned">
                     <form method="post" action="{{ url_for('assign_order', order_number=order.order_number) }}" class="assign-form">
                         {% include "_csrf_field.html" %}
                         <input type="hidden" name="view" value="{{ view_filter }}">
