@@ -55,7 +55,7 @@
                 <a href="{{ url_for('home') }}">Home</a>
                 <a href="{{ url_for('customers_list') }}">Customers</a>
                 <a href="{{ url_for('drafts_list') }}">Drafts</a>
-                <a href="{{ url_for('orders_list') }}">Orders</a>
+                <a href="{{ url_for('orders_mobile') }}">Orders</a>
                 {% if session.get('user', {}).get('role') == 'admin' %}
                     <a href="{{ url_for('admin') }}">Admin</a>
                 {% endif %}

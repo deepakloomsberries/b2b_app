@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block body_class %}mobile-ui{% endblock %}
+{% block body_class %}mobile-ui home-page{% endblock %}
 
 {% block content %}
 <header class="app-header with-back">
@@ -28,7 +28,7 @@
         <span class="tile-icon">📝</span>
         <span class="tile-label">Drafts</span>
     </a>
-    <a class="dashboard-tile tile-orders" href="{{ url_for('orders_list') }}">
+    <a class="dashboard-tile tile-orders" href="{{ url_for('orders_list') }}" id="order-history-tile">
         <span class="tile-icon">🧾</span>
         <span class="tile-label">Order History</span>
     </a>
@@ -90,4 +90,13 @@
 </section>
 
 <a class="fab" href="{{ url_for('customers_list') }}" aria-label="New order">🧾</a>
+
+<script>
+    (function () {
+        var tile = document.getElementById('order-history-tile');
+        if (tile && window.matchMedia && window.matchMedia('(max-width: 768px)').matches) {
+            tile.href = "{{ url_for('orders_mobile') }}";
+        }
+    })();
+</script>
 {% endblock %}
