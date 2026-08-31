@@ -329,9 +329,27 @@
                     <a class="button small secondary" href="{{ url_for('admin', q=product_query, limit=product_limit, page=product_page+1) }}#products">Next</a>
                 {% endif %}
             </div>
+            {% if products %}
+                <div class="admin-bulk-bar">
+                    <label class="admin-select-all">
+                        <input type="checkbox" id="select-all-products" {% if not products %}disabled{% endif %}>
+                        Select all on this page
+                    </label>
+                    <span class="admin-bulk-count" id="bulk-select-count">0 selected</span>
+                    <button type="submit" form="bulk-delete-products-form" class="button small danger" id="bulk-delete-btn" disabled>
+                        Delete Selected
+                    </button>
+                </div>
+                <form id="bulk-delete-products-form" method="post" data-confirm="Delete the selected products? This permanently removes them from the catalogue and cannot be undone.">
+                    {% include "_csrf_field.html" %}
+                    <input type="hidden" name="action" value="bulk_delete_products">
+                </form>
+            {% endif %}
             <ul class="admin-list">
                 {% for product in products %}
                     <li class="admin-list-item">
+                        <input type="checkbox" class="admin-row-select" name="skus" value="{{ product.sku }}"
+                               form="bulk-delete-products-form" aria-label="Select {{ product.title }} for bulk delete">
                         {% if product.image_url %}
                             <img src="{{ product.image_url }}" alt="{{ product.title }}" loading="lazy" decoding="async">
                         {% endif %}
@@ -1060,6 +1078,44 @@
             }
         });
     });
+
+    const productCheckboxes = Array.from(document.querySelectorAll('.admin-row-select'));
+    const bulkDeleteBtn = document.getElementById('bulk-delete-btn');
+    const bulkSelectCount = document.getElementById('bulk-select-count');
+    const selectAllProducts = document.getElementById('select-all-products');
+    const bulkDeleteForm = document.getElementById('bulk-delete-products-form');
+
+    const updateBulkProductState = () => {
+        const checkedCount = productCheckboxes.filter((cb) => cb.checked).length;
+        if (bulkSelectCount) {
+            bulkSelectCount.textContent = `${checkedCount} selected`;
+        }
+        if (bulkDeleteBtn) {
+            bulkDeleteBtn.disabled = checkedCount === 0;
+        }
+        if (bulkDeleteForm) {
+            bulkDeleteForm.dataset.confirm =
+                `Delete ${checkedCount} selected product${checkedCount === 1 ? '' : 's'}? ` +
+                'This permanently removes them from the catalogue and cannot be undone.';
+        }
+        if (selectAllProducts) {
+            selectAllProducts.checked = checkedCount > 0 && checkedCount === productCheckboxes.length;
+            selectAllProducts.indeterminate = checkedCount > 0 && checkedCount < productCheckboxes.length;
+        }
+    };
+
+    productCheckboxes.forEach((checkbox) => {
+        checkbox.addEventListener('change', updateBulkProductState);
+    });
+
+    selectAllProducts?.addEventListener('change', () => {
+        productCheckboxes.forEach((checkbox) => {
+            checkbox.checked = selectAllProducts.checked;
+        });
+        updateBulkProductState();
+    });
+
+    updateBulkProductState();
 
     const adminTabs = Array.from(document.querySelectorAll('.admin-tab'));
     const adminPanels = Array.from(document.querySelectorAll('.admin-tab-panel'));

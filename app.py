@@ -3033,6 +3033,44 @@ def admin():
                     )
                     conn.commit()
                 message = "Product visibility updated."
+        elif action == "bulk_delete_products":
+            skus = sorted({s.strip() for s in request.form.getlist("skus") if s.strip()})
+            if not skus:
+                warning = "Select at least one product to delete."
+            else:
+                with get_db() as conn:
+                    placeholders = ",".join("?" for _ in skus)
+                    existing = conn.execute(
+                        f"SELECT sku, title FROM products WHERE sku IN ({placeholders})",
+                        skus,
+                    ).fetchall()
+                    if not existing:
+                        warning = "None of the selected products were found."
+                    else:
+                        found_skus = [row["sku"] for row in existing]
+                        fp = ",".join("?" for _ in found_skus)
+                        log_audit(
+                            conn,
+                            "product_bulk_delete",
+                            "products",
+                            {
+                                "count": len(found_skus),
+                                "products": [
+                                    {"sku": row["sku"], "title": row["title"]}
+                                    for row in existing
+                                ],
+                            },
+                        )
+                        conn.execute(
+                            f"DELETE FROM salesman_prices WHERE sku IN ({fp})", found_skus
+                        )
+                        conn.execute(
+                            f"DELETE FROM reserved_stock WHERE sku IN ({fp})", found_skus
+                        )
+                        conn.execute(f"DELETE FROM stock WHERE sku IN ({fp})", found_skus)
+                        conn.execute(f"DELETE FROM products WHERE sku IN ({fp})", found_skus)
+                        conn.commit()
+                        message = f"Deleted {len(found_skus)} product(s)."
         if action:
             _catalog_cache["timestamp"] = 0
             _catalog_cache["data"] = None

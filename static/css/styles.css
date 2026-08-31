@@ -2823,6 +2823,40 @@ select:focus-visible {
     gap: 10px;
 }
 
+.admin-bulk-bar {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    background: #f8fafc;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.admin-select-all {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1f2a44;
+}
+
+.admin-bulk-count {
+    font-size: 0.85rem;
+    color: var(--secondary);
+}
+
+.admin-bulk-bar .button {
+    margin-left: auto;
+}
+
+.admin-row-select {
+    flex-shrink: 0;
+}
+
 .admin-list-item {
     display: flex;
     align-items: center;

@@ -78,6 +78,90 @@ def test_upsert_upload_does_not_delete_existing_products(client, db):
         assert skus == {"SKU-KEEP", "SKU-NEW"}
 
 
+def test_bulk_delete_products_removes_selected_and_logs_audit(client, db):
+    login(client)
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO products (sku, title, price, is_active) VALUES "
+            "('SKU-A', 'Widget A', 5, 1), ('SKU-B', 'Widget B', 6, 1), ('SKU-C', 'Widget C', 7, 1)"
+        )
+        conn.execute("INSERT INTO stock (sku, stock_qty) VALUES ('SKU-A', 10), ('SKU-B', 20)")
+        conn.execute("INSERT INTO reserved_stock (sku, reserved_qty) VALUES ('SKU-A', 2)")
+        conn.commit()
+
+    response = post_with_csrf(
+        client,
+        "/admin",
+        {"action": "bulk_delete_products", "skus": ["SKU-A", "SKU-B"]},
+        get_path="/admin",
+    )
+    assert b"Deleted 2 product(s)." in response.data
+
+    with db() as conn:
+        remaining = {row["sku"] for row in conn.execute("SELECT sku FROM products").fetchall()}
+        assert remaining == {"SKU-C"}
+
+        stock_remaining = {row["sku"] for row in conn.execute("SELECT sku FROM stock").fetchall()}
+        assert "SKU-A" not in stock_remaining
+        assert "SKU-B" not in stock_remaining
+
+        reserved_remaining = {
+            row["sku"] for row in conn.execute("SELECT sku FROM reserved_stock").fetchall()
+        }
+        assert "SKU-A" not in reserved_remaining
+
+        audit = conn.execute(
+            "SELECT details FROM audit_logs WHERE action = 'product_bulk_delete'"
+        ).fetchone()
+        assert audit is not None
+        details = json.loads(audit["details"])
+        assert details["count"] == 2
+        assert {p["sku"] for p in details["products"]} == {"SKU-A", "SKU-B"}
+
+
+def test_bulk_delete_products_with_no_selection_shows_warning(client, db):
+    login(client)
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO products (sku, title, price, is_active) VALUES ('SKU-KEEP', 'Keep Me', 5, 1)"
+        )
+        conn.commit()
+
+    response = post_with_csrf(
+        client, "/admin", {"action": "bulk_delete_products"}, get_path="/admin"
+    )
+    assert b"Select at least one product to delete." in response.data
+    with db() as conn:
+        skus = {row["sku"] for row in conn.execute("SELECT sku FROM products").fetchall()}
+    assert skus == {"SKU-KEEP"}
+
+
+def test_plain_user_cannot_bulk_delete_products(client, db):
+    from werkzeug.security import generate_password_hash
+
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO users (name, role, password, created_at) VALUES (?, 'user', ?, datetime('now'))",
+            ("salesuser", generate_password_hash("Salespass123!")),
+        )
+        conn.execute(
+            "INSERT INTO products (sku, title, price, is_active) VALUES ('SKU-KEEP', 'Keep Me', 5, 1)"
+        )
+        conn.commit()
+    login(client, username="salesuser", password="Salespass123!")
+
+    response = post_with_csrf(
+        client,
+        "/admin",
+        {"action": "bulk_delete_products", "skus": ["SKU-KEEP"]},
+        get_path="/orders",
+    )
+    assert b"Admin access required" in response.data
+    with db() as conn:
+        skus = {row["sku"] for row in conn.execute("SELECT sku FROM products").fetchall()}
+    assert skus == {"SKU-KEEP"}
+
+
 def test_static_url_includes_cache_busting_version(client):
     login(client)
     html = client.get("/login").data.decode()
