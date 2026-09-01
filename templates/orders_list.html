@@ -29,6 +29,7 @@
     </div>
     <div class="orders-filters">
         <input type="hidden" name="view" value="{{ view_filter }}">
+        <input type="hidden" name="page" value="1">
         <label>
             Submitted Start
             <input type="date" name="start_date" value="{{ start_date }}">
@@ -46,6 +47,15 @@
             <input type="text" name="order_id" placeholder="Order number" value="{{ order_query }}">
         </label>
         <label>
+            Salesman
+            <select name="salesman">
+                <option value="">All</option>
+                {% for name in salesmen %}
+                    <option value="{{ name }}" {% if salesman_filter == name %}selected{% endif %}>{{ name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label>
             Status
             <select name="status">
                 <option value="">All</option>
@@ -55,7 +65,7 @@
             </select>
         </label>
         <label>
-            Items per page
+            Orders per page
             <select name="limit">
                 {% for option in [25, 50, 100, 200] %}
                     <option value="{{ option }}" {% if limit_value == option %}selected{% endif %}>{{ option }}</option>
@@ -63,6 +73,9 @@
             </select>
         </label>
         <button class="button secondary small" type="submit">Search</button>
+        {% if buyer_query or order_query or status_filter or salesman_filter or start_date or end_date %}
+            <a class="button secondary small" href="{{ url_for('orders_list', view=view_filter) }}">Clear filters</a>
+        {% endif %}
     </div>
 </form>
 
@@ -146,6 +159,18 @@
     </section>
 {% else %}
     <div class="empty-state">No orders found in your account.</div>
+{% endif %}
+
+{% if page_value > 1 or has_more %}
+    <div class="orders-pagination">
+        {% if page_value > 1 %}
+            <a class="button small secondary" href="{{ url_for('orders_list', view=view_filter, buyer=buyer_query, order_id=order_query, status=status_filter, salesman=salesman_filter, start_date=start_date, end_date=end_date, limit=limit_value, page=page_value-1) }}">Previous</a>
+        {% endif %}
+        <span class="orders-pagination-label">Page {{ page_value }}</span>
+        {% if has_more %}
+            <a class="button small secondary" href="{{ url_for('orders_list', view=view_filter, buyer=buyer_query, order_id=order_query, status=status_filter, salesman=salesman_filter, start_date=start_date, end_date=end_date, limit=limit_value, page=page_value+1) }}">Next</a>
+        {% endif %}
+    </div>
 {% endif %}
 
 <dialog id="order-detail-modal" class="modal">

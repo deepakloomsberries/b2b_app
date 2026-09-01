@@ -374,6 +374,18 @@ h2 {
     font-size: 0.85rem;
 }
 
+.orders-pagination {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.orders-pagination-label {
+    font-size: 0.85rem;
+    color: var(--secondary);
+}
+
 .orders-bulk {
     background: #fff;
     border-radius: 16px;

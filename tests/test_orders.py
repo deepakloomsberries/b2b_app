@@ -76,6 +76,64 @@ def test_duplicate_order_within_five_minutes_is_rejected(client, db):
     assert count == 1
 
 
+def test_orders_list_filters_by_salesman(client, db):
+    login(client)
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO customers (name, phone, address, created_at) VALUES ('Cust', '1', 'a', datetime('now'))"
+        )
+        customer_id = conn.execute("SELECT id FROM customers WHERE name = 'Cust'").fetchone()[0]
+        conn.execute(
+            "INSERT INTO orders (order_number, customer_id, created_at, submitted_by) "
+            "VALUES ('ORD-ALICE', ?, datetime('now'), 'Alice')",
+            (customer_id,),
+        )
+        conn.execute(
+            "INSERT INTO orders (order_number, customer_id, created_at, submitted_by) "
+            "VALUES ('ORD-BOB', ?, datetime('now'), 'Bob')",
+            (customer_id,),
+        )
+        conn.commit()
+
+    response = client.get("/orders?view=history&salesman=Alice")
+    html = response.data.decode()
+    assert "ORD-ALICE" in html
+    assert "ORD-BOB" not in html
+
+    # The filter dropdown should list every distinct salesman who has ever submitted.
+    unfiltered = client.get("/orders?view=history").data.decode()
+    assert 'value="Alice"' in unfiltered
+    assert 'value="Bob"' in unfiltered
+
+
+def test_orders_list_paginates_with_next_and_previous(client, db):
+    login(client)
+    with db() as conn:
+        conn.execute(
+            "INSERT INTO customers (name, phone, address, created_at) VALUES ('Cust', '1', 'a', datetime('now'))"
+        )
+        customer_id = conn.execute("SELECT id FROM customers WHERE name = 'Cust'").fetchone()[0]
+        for i in range(15):
+            conn.execute(
+                "INSERT INTO orders (order_number, customer_id, created_at, submitted_by) "
+                "VALUES (?, ?, ?, 'admin')",
+                (f"ORD-{i:02d}", customer_id, f"2025-01-{i + 1:02d}T00:00:00"),
+            )
+        conn.commit()
+
+    page1 = client.get("/orders?view=history&limit=10&page=1").data.decode()
+    assert "ORD-14" in page1  # newest first
+    assert "ORD-04" not in page1  # 11th newest, belongs on page 2
+    assert ">Next<" in page1
+    assert ">Previous<" not in page1
+
+    page2 = client.get("/orders?view=history&limit=10&page=2").data.decode()
+    assert "ORD-04" in page2
+    assert "ORD-14" not in page2
+    assert ">Previous<" in page2
+    assert ">Next<" not in page2
+
+
 def test_customers_list_shows_most_recent_order_total(client, db):
     login(client)
     with db() as conn:

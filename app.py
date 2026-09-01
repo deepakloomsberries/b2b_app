@@ -1433,6 +1433,7 @@ def orders_list():
     buyer_query = request.args.get("buyer", "").strip()
     order_query = request.args.get("order_id", "").strip()
     status_filter = request.args.get("status", "").strip()
+    salesman_filter = request.args.get("salesman", "").strip()
     start_date = request.args.get("start_date", "").strip()
     end_date = request.args.get("end_date", "").strip()
     view_filter = get_orders_view_param()
@@ -1441,6 +1442,12 @@ def orders_list():
         limit_value = min(max(int(limit_raw), 10), 200)
     except ValueError:
         limit_value = 50
+    page_raw = request.args.get("page", "1").strip()
+    try:
+        page_value = max(int(page_raw), 1)
+    except ValueError:
+        page_value = 1
+    offset_value = (page_value - 1) * limit_value
 
     filters = []
     params = []
@@ -1455,6 +1462,9 @@ def orders_list():
     if status_filter:
         filters.append("o.order_status = ?")
         params.append(status_filter)
+    if salesman_filter:
+        filters.append("o.submitted_by = ?")
+        params.append(salesman_filter)
     if start_date:
         filters.append("o.created_at >= ?")
         params.append(f"{start_date}T00:00:00")
@@ -1479,22 +1489,33 @@ def orders_list():
             f"{where_clause} "
             "GROUP BY o.id "
             "ORDER BY o.created_at DESC "
-            "LIMIT ?",
-            (*params, limit_value),
+            "LIMIT ? OFFSET ?",
+            (*params, limit_value + 1, offset_value),
         ).fetchall()
+        has_more = len(orders) > limit_value
+        orders = orders[:limit_value]
         warehouse_users = conn.execute(
             "SELECT id, name FROM users WHERE role IN ('warehouse', 'admin') ORDER BY name"
+        ).fetchall()
+        salesmen = conn.execute(
+            "SELECT DISTINCT submitted_by FROM orders "
+            "WHERE submitted_by IS NOT NULL AND submitted_by != '' "
+            "ORDER BY submitted_by"
         ).fetchall()
     return render_template(
         "orders_list.html",
         orders=orders,
         warehouse_users=warehouse_users,
+        salesmen=[row["submitted_by"] for row in salesmen],
         buyer_query=buyer_query,
         order_query=order_query,
         status_filter=status_filter,
+        salesman_filter=salesman_filter,
         start_date=start_date,
         end_date=end_date,
         limit_value=limit_value,
+        page_value=page_value,
+        has_more=has_more,
         view_filter=view_filter,
     )
 
@@ -1646,7 +1667,10 @@ def orders_mobile():
 def download_order(order_number):
     with get_db() as conn:
         order = conn.execute(
-            "SELECT o.order_number, o.created_at, c.name AS customer_name "
+            "SELECT o.order_number, o.created_at, "
+            "COALESCE(o.order_status, 'submitted') AS order_status, "
+            "COALESCE(o.submitted_by, 'Unknown') AS submitted_by, "
+            "c.name AS customer_name "
             "FROM orders o JOIN customers c ON o.customer_id = c.id "
             "WHERE o.order_number = ?",
             (order_number,),
@@ -1665,6 +1689,8 @@ def download_order(order_number):
     writer = csv.writer(output)
     writer.writerow(["Order Number", sanitize_csv_cell(order["order_number"])])
     writer.writerow(["Customer", sanitize_csv_cell(order["customer_name"])])
+    writer.writerow(["Salesman", sanitize_csv_cell(order["submitted_by"])])
+    writer.writerow(["Status", sanitize_csv_cell(order["order_status"].capitalize())])
     writer.writerow(["Created At", order["created_at"]])
     writer.writerow([])
     writer.writerow(["SKU", "Title", "Qty", "Price"])
@@ -1691,7 +1717,10 @@ def export_orders(order_numbers, as_pdf=False):
     with get_db() as conn:
         placeholders = ",".join("?" for _ in order_numbers)
         orders = conn.execute(
-            "SELECT o.id, o.order_number, o.created_at, c.name AS customer_name, "
+            "SELECT o.id, o.order_number, o.created_at, "
+            "COALESCE(o.order_status, 'submitted') AS order_status, "
+            "COALESCE(o.submitted_by, 'Unknown') AS submitted_by, "
+            "c.name AS customer_name, "
             "c.phone AS customer_phone, c.address AS customer_address, c.city AS customer_city, "
             "c.state AS customer_state, c.country AS customer_country "
             f"FROM orders o JOIN customers c ON o.customer_id = c.id "
@@ -1705,7 +1734,13 @@ def export_orders(order_numbers, as_pdf=False):
                 headers={"Content-Disposition": "attachment; filename=orders.txt"},
             )
         order_map = {
-            order["id"]: {"number": order["order_number"], "created_at": order["created_at"]}
+            order["id"]: {
+                "number": order["order_number"],
+                "created_at": order["created_at"],
+                "customer_name": order["customer_name"],
+                "submitted_by": order["submitted_by"],
+                "order_status": order["order_status"],
+            }
             for order in orders
         }
         order_ids = [order["id"] for order in orders]
@@ -1785,8 +1820,14 @@ def export_orders(order_numbers, as_pdf=False):
                     [
                         Paragraph("<b>Customer</b>", normal_style),
                         Paragraph(format_customer_details(order), normal_style),
+                        Paragraph("<b>Salesman</b>", normal_style),
+                        Paragraph(order["submitted_by"], normal_style),
+                    ],
+                    [
                         Paragraph("<b>Status</b>", normal_style),
-                        Paragraph("Submitted", normal_style),
+                        Paragraph(order["order_status"].capitalize(), normal_style),
+                        Paragraph("", normal_style),
+                        Paragraph("", normal_style),
                     ],
                 ],
                 colWidths=[1.1 * inch, 3.3 * inch, 1.1 * inch, 1.8 * inch],
@@ -1912,12 +1953,28 @@ def export_orders(order_numbers, as_pdf=False):
 
     output = io.StringIO()
     writer = csv.writer(output)
-    writer.writerow(["Order Number", "Created At", "SKU", "Title", "Qty", "Price"])
+    writer.writerow(
+        [
+            "Order Number",
+            "Customer",
+            "Salesman",
+            "Order Status",
+            "Created At",
+            "SKU",
+            "Title",
+            "Qty",
+            "Price",
+        ]
+    )
     for item in items:
+        order_info = order_map.get(item["order_id"], {})
         writer.writerow(
             [
-                sanitize_csv_cell(order_map.get(item["order_id"], {}).get("number", "")),
-                order_map.get(item["order_id"], {}).get("created_at", ""),
+                sanitize_csv_cell(order_info.get("number", "")),
+                sanitize_csv_cell(order_info.get("customer_name", "")),
+                sanitize_csv_cell(order_info.get("submitted_by", "")),
+                sanitize_csv_cell((order_info.get("order_status", "") or "").capitalize()),
+                order_info.get("created_at", ""),
                 sanitize_csv_cell(item["sku"]),
                 sanitize_csv_cell(item["title_snapshot"]),
                 item["qty"],
