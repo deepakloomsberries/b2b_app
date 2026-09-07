@@ -36,6 +36,11 @@
     <input type="hidden" name="customer_id" value="{{ customer.id }}">
     <input type="hidden" name="items_json" id="items-json" value="[]">
 
+    <div class="cart-list-header">
+        <span class="cart-list-count" id="cart-item-count">{{ items|length }} item{{ '' if items|length == 1 else 's' }} in cart</span>
+        <button type="button" class="button danger small" id="clear-cart-btn" {% if not items %}disabled{% endif %}>Clear Cart</button>
+    </div>
+
     <div class="cart-list">
         {% for item in items %}
             <div class="cart-item" data-sku="{{ item.sku }}" data-qty="{{ item.qty }}"
@@ -72,7 +77,12 @@
         {% endfor %}
     </div>
 
-    <div class="cart-summary">
+    <div class="empty-state" id="cart-empty-state" hidden>
+        Your cart is empty.
+        <a href="{{ url_for('catalog', customer_id=customer.id) }}">Continue shopping</a>
+    </div>
+
+    <div class="cart-summary" id="cart-summary">
         <div class="cart-totals">
             <div class="cart-line"><span>Sub Total</span><span>{{ currency_symbol }} <span id="subtotal">0.00</span></span></div>
             <div class="cart-line"><span>VAT ({{ (vat_rate * 100)|round(1) }}%)</span><span>{{ currency_symbol }} <span id="tax">0.00</span></span></div>
@@ -99,6 +109,10 @@
     const quotationBtn = document.getElementById('download-quotation');
     const reviewForm = document.getElementById('review-form');
     const backItemsInput = document.getElementById('back-items-json');
+    const clearCartBtn = document.getElementById('clear-cart-btn');
+    const cartItemCountEl = document.getElementById('cart-item-count');
+    const cartEmptyStateEl = document.getElementById('cart-empty-state');
+    const cartSummaryEl = document.getElementById('cart-summary');
     const VAT_RATE = {{ vat_rate }};
     const customerId = '{{ customer.id }}';
     const cartStorageKey = customerId ? `sales_cart_${customerId}` : null;
@@ -138,6 +152,18 @@
         if (quotationBtn) {
             quotationBtn.disabled = isEmpty;
         }
+        if (cartItemCountEl) {
+            cartItemCountEl.textContent = `${payload.length} item${payload.length === 1 ? '' : 's'} in cart`;
+        }
+        if (clearCartBtn) {
+            clearCartBtn.disabled = isEmpty;
+        }
+        if (cartEmptyStateEl) {
+            cartEmptyStateEl.hidden = !isEmpty;
+        }
+        if (cartSummaryEl) {
+            cartSummaryEl.hidden = isEmpty;
+        }
     };
 
     items.forEach((item) => {
@@ -175,6 +201,25 @@
             priceInput.value = value.toFixed(2);
             buildPayload();
         });
+    });
+
+    clearCartBtn?.addEventListener('click', () => {
+        if (clearCartBtn.disabled) {
+            return;
+        }
+        if (!confirm('Remove all items from this cart? This cannot be undone.')) {
+            return;
+        }
+        items.forEach((item) => {
+            item.dataset.removed = 'true';
+            item.dataset.qty = '0';
+            item.style.display = 'none';
+            const input = item.querySelector('.qty-input');
+            if (input) {
+                input.value = 0;
+            }
+        });
+        buildPayload();
     });
 
     buildPayload();

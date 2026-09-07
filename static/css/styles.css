@@ -1114,6 +1114,20 @@ h2 {
     color: #fff;
 }
 
+.cart-list-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.cart-list-count {
+    font-size: 0.85rem;
+    color: var(--secondary);
+    font-weight: 600;
+}
+
 .cart-list {
     display: grid;
     gap: 16px;
